@@ -1,0 +1,2591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>紋章の勇者 〜封魔の二紋〜</title>
+<style>
+/* ===== 全体レイアウト（スマホ最優先） ===== */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#070a12;touch-action:none;
+ user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+ font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif}
+#wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+#screen{image-rendering:pixelated;image-rendering:crisp-edges;background:#000;
+ border-radius:6px;box-shadow:0 0 26px rgba(90,130,255,.16)}
+
+/* ===== 仮想ボタン（右手：A/B） ===== */
+.abtn{position:fixed;display:flex;align-items:center;justify-content:center;
+ border:2px solid rgba(255,255,255,.55);border-radius:50%;color:rgba(255,255,255,.9);
+ font-weight:bold;background:rgba(255,255,255,.10);z-index:20}
+#btnA{width:76px;height:76px;right:16px;bottom:calc(92px + env(safe-area-inset-bottom));font-size:26px}
+#btnB{width:60px;height:60px;right:104px;bottom:calc(38px + env(safe-area-inset-bottom));font-size:20px}
+.abtn.on{background:rgba(255,230,120,.4)}
+
+/* ===== 仮想ジョイスティック（左手・フローティング） ===== */
+#stickBase{position:fixed;width:104px;height:104px;border:2px solid rgba(255,255,255,.4);
+ border-radius:50%;background:rgba(255,255,255,.06);display:none;z-index:20;pointer-events:none}
+#stickKnob{position:absolute;width:46px;height:46px;left:27px;top:27px;border-radius:50%;
+ background:rgba(255,255,255,.35)}
+
+/* ===== アイテムバー（下部中央） ===== */
+#itemBar{position:fixed;left:50%;transform:translateX(-50%);
+ bottom:calc(8px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:20}
+.slot{width:54px;height:54px;position:relative;border:2px solid rgba(255,255,255,.35);
+ border-radius:10px;background:rgba(0,0,24,.5);display:flex;flex-direction:column;
+ align-items:center;justify-content:center;gap:1px}
+.slot canvas{width:30px;height:30px;image-rendering:pixelated}
+.slot .lbl{font-size:8px;color:#cfd6ff;line-height:1}
+.slot.sel{border-color:#ffe066;background:rgba(96,84,0,.55)}
+.slot.lock{opacity:.25}
+.slot .cnt{position:absolute;right:3px;top:1px;color:#ffe066;font-size:11px;font-weight:bold}
+
+/* ===== 上部ボタン（メニュー・音・フルスクリーン） ===== */
+#topBtns{position:fixed;top:calc(6px + env(safe-area-inset-top));right:8px;display:flex;gap:8px;z-index:30}
+#topBtns button{width:42px;height:42px;border-radius:10px;border:1px solid rgba(255,255,255,.4);
+ background:rgba(0,0,24,.55);color:#fff;font-size:18px}
+#topBtns button:active{background:rgba(60,80,160,.7)}
+
+/* ===== オーバーレイ（タイトル・メニュー・ゲームオーバー） ===== */
+.ov{position:fixed;inset:0;background:rgba(4,6,16,.78);display:flex;align-items:center;
+ justify-content:center;z-index:40}
+.ov.hidden{display:none}
+.panel{background:#101a30;border:2px solid #5a76c8;border-radius:14px;padding:22px 26px;
+ display:flex;flex-direction:column;gap:12px;min-width:240px;text-align:center}
+.panel h2{color:#ffe066;font-size:18px;margin-bottom:2px}
+.panel button{padding:12px;border-radius:10px;border:1px solid #7a90d8;background:#1c2c52;
+ color:#eef;font-size:15px}
+.panel button:disabled{opacity:.35}
+.panel button:active{background:#31498a}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="screen" width="256" height="192"></canvas></div>
+
+<!-- タッチ操作UI -->
+<div id="stickBase"><div id="stickKnob"></div></div>
+<div id="btnA" class="abtn">A</div>
+<div id="btnB" class="abtn">B</div>
+<div id="itemBar">
+  <div class="slot lock" data-i="0"><canvas width="32" height="32"></canvas><span class="lbl">弓</span></div>
+  <div class="slot lock" data-i="1"><canvas width="32" height="32"></canvas><span class="lbl">ブーメラン</span></div>
+  <div class="slot lock" data-i="2"><canvas width="32" height="32"></canvas><span class="lbl">くすり</span><span class="cnt"></span></div>
+</div>
+<div id="topBtns">
+  <button id="muteBtn" aria-label="音">♪</button>
+  <button id="fsBtn" aria-label="フルスクリーン">⛶</button>
+  <button id="menuBtn" aria-label="メニュー">☰</button>
+</div>
+
+<!-- タイトル選択 -->
+<div id="titleOv" class="ov hidden"><div class="panel">
+  <h2>紋章の勇者</h2>
+  <button id="tNew">はじめから</button>
+  <button id="tCont">つづきから</button>
+</div></div>
+
+<!-- ポーズメニュー -->
+<div id="menuOv" class="ov hidden"><div class="panel">
+  <h2>メニュー</h2>
+  <button id="mResume">つづける</button>
+  <button id="mSave">セーブする</button>
+  <button id="mHelp">あそびかた</button>
+  <button id="mSound">音：ON</button>
+  <button id="mTitle">タイトルへ</button>
+</div></div>
+
+<!-- ゲームオーバー -->
+<div id="overOv" class="ov hidden"><div class="panel">
+  <h2>ゲームオーバー</h2>
+  <button id="oCont">つづきから</button>
+  <button id="oTitle">タイトルへ</button>
+</div></div>
+
+<script>
+'use strict';
+/* =========================================================================
+   紋章の勇者 〜封魔の二紋〜
+   スマホ最適化・単一ファイルのゼルダ風トップダウン探索アドベンチャー
+   - 左：フローティングジョイスティック ／ 右：A（剣・調べる）B（アイテム）
+   - キーボード：WASD/矢印, Z/Space=A, X/Shift=B, 1-3切替, Esc=メニュー
+   ========================================================================= */
+
+// ---------- 基本定数 ----------
+const W=256, H=192, TS=16;              // 内部解像度とタイルサイズ
+const cv=document.getElementById('screen'), cx=cv.getContext('2d');
+cx.imageSmoothingEnabled=false;
+const $=id=>document.getElementById(id);
+
+// ---------- ユーティリティ ----------
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+function mulberry32(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rectHit=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+
+// ---------- セーフストレージ ----------
+// localStorageが使えない埋め込み環境では自動的に内部メモリへ退避する
+const memStore={};
+const store={
+ get(k){
+  let v=null;
+  try{v=localStorage.getItem(k)}catch(e){}
+  return v!==null?v:((k in memStore)?memStore[k]:null);
+ },
+ set(k,v){
+  memStore[k]=v; // 常に内部メモリにも保持（保存不可環境の保険）
+  try{localStorage.setItem(k,v)}catch(e){}
+ },
+};
+const SAVE_KEY='monshou-no-yusha-save-v1';
+
+// ---------- オーディオ（Web Audio API：BGM＋効果音） ----------
+let AC=null, masterG, musicG, sfxG, muted=false;
+function ensureAudio(){
+ if(AC){if(AC.state==='suspended')AC.resume();return}
+ try{
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  masterG=AC.createGain(); masterG.gain.value=muted?0:0.6; masterG.connect(AC.destination);
+  musicG=AC.createGain();  musicG.gain.value=0.5;  musicG.connect(masterG);
+  sfxG=AC.createGain();    sfxG.gain.value=1;      sfxG.connect(masterG);
+  setInterval(musicTick,40); // BGMスケジューラ（先読み方式）
+ }catch(e){}
+}
+function setMute(m){muted=m;if(masterG)masterG.gain.value=m?0:0.6}
+const mf=n=>440*Math.pow(2,(n-69)/12); // MIDIノート番号→周波数
+
+// 単音を鳴らす（効果音・BGM共用）
+function tone(f0,dur,opt){
+ opt=opt||{};
+ if(!AC)return;
+ const t=AC.currentTime+(opt.delay||0);
+ const o=AC.createOscillator(), g=AC.createGain();
+ o.type=opt.type||'square';
+ o.frequency.setValueAtTime(f0,t);
+ if(opt.f1)o.frequency.exponentialRampToValueAtTime(Math.max(1,opt.f1),t+dur);
+ g.gain.setValueAtTime(opt.vol||0.2,t);
+ g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+ o.connect(g); g.connect(opt.dest||sfxG);
+ o.start(t); o.stop(t+dur+0.02);
+}
+// ホワイトノイズ（剣・爆発など）
+let noiseBuf=null;
+function makeNoiseBuf(){
+ if(noiseBuf||!AC)return;
+ noiseBuf=AC.createBuffer(1,AC.sampleRate*0.5,AC.sampleRate);
+ const d=noiseBuf.getChannelData(0);
+ for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+}
+function noise(dur,vol,delay,filt){
+ if(!AC)return; makeNoiseBuf();
+ const t=AC.currentTime+(delay||0), s=AC.createBufferSource(), g=AC.createGain();
+ s.buffer=noiseBuf; s.loop=true;
+ g.gain.setValueAtTime(vol||0.2,t);
+ g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+ s.connect(g);
+ if(filt){const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=filt;g.connect(f);f.connect(sfxG)}
+ else g.connect(sfxG);
+ s.start(t); s.stop(t+dur+0.02);
+}
+// 効果音集
+const sfx={
+ sword(){noise(0.07,0.16);tone(340,0.08,{f1:120,vol:0.12})},
+ hit(){tone(220,0.09,{f1:70,vol:0.2})},
+ hurt(){tone(180,0.25,{f1:50,vol:0.25,type:'sawtooth'})},
+ coin(){tone(988,0.06,{vol:0.15});tone(1319,0.12,{vol:0.15,delay:0.06})},
+ heart(){tone(660,0.08,{vol:0.15});tone(880,0.15,{vol:0.15,delay:0.08})},
+ key(){tone(880,0.07,{vol:0.15});tone(1760,0.15,{vol:0.15,delay:0.07})},
+ unlock(){tone(200,0.1,{vol:0.2});tone(300,0.12,{vol:0.2,delay:0.1});tone(600,0.2,{vol:0.15,delay:0.22})},
+ chest(){[784,988,1175,1568].forEach((f,i)=>tone(f,i===3?0.4:0.12,{vol:0.16,delay:i*0.12}))},
+ arrow(){noise(0.05,0.12);tone(900,0.06,{f1:500,vol:0.08})},
+ boomTick(){tone(520,0.05,{f1:420,vol:0.07,type:'triangle'})},
+ sw(){tone(520,0.1,{f1:260,vol:0.2});tone(392,0.2,{vol:0.15,delay:0.1})},
+ stairs(){tone(500,0.25,{f1:150,vol:0.15,type:'triangle'})},
+ blip(){tone(1200,0.02,{vol:0.05})},
+ expl(){noise(0.35,0.3,0,700);tone(120,0.3,{f1:40,vol:0.25,type:'sawtooth'})},
+ save(){tone(660,0.1,{vol:0.15});tone(990,0.2,{vol:0.15,delay:0.1})},
+ roar(){tone(90,0.5,{f1:35,vol:0.3,type:'sawtooth'});noise(0.4,0.2,0,300)},
+ deny(){tone(150,0.15,{vol:0.2});tone(140,0.15,{vol:0.2,delay:0.15})},
+ clink(){tone(1500,0.05,{vol:0.15});tone(2000,0.08,{vol:0.1,delay:0.03})},
+ cursor(){tone(700,0.03,{vol:0.08})},
+ fanfare(){[659,784,988,1319,1175,1568].forEach((f,i)=>tone(f,i>=4?0.5:0.15,{vol:0.16,delay:i*0.15}))},
+};
+
+// ---------- BGM（16分音符のシーケンス、0=休符） ----------
+const SONGS={
+ // フィールド：明るく冒険的
+ over:{bpm:132,
+  lead:[76,0,79,0,84,0,79,0,81,0,79,0,76,0,79,0,74,0,77,0,81,0,77,0,79,0,77,0,74,0,72,0],
+  bass:[48,0,55,0,52,0,55,0,45,0,52,0,48,0,52,0,50,0,57,0,53,0,57,0,43,0,50,0,47,0,55,0],hat:true},
+ // ダンジョン：神秘的
+ dun:{bpm:96,
+  lead:[57,0,60,0,64,0,60,0,57,0,60,0,64,0,60,0,55,0,59,0,62,0,59,0,55,0,59,0,62,0,59,0],
+  bass:[33,0,0,0,40,0,0,0,33,0,0,0,40,0,0,0,31,0,0,0,38,0,0,0,31,0,0,0,38,0,0,0],hat:false},
+ // ボス戦：緊張感
+ boss:{bpm:160,
+  lead:[69,69,0,69,72,0,69,0,68,68,0,68,71,0,68,0,66,66,0,66,69,0,66,0,64,0,66,0,68,0,71,0],
+  bass:[45,45,45,45,45,45,45,45,44,44,44,44,44,44,44,44,42,42,42,42,42,42,42,42,40,40,40,40,43,43,43,43],hat:true},
+};
+let curSong=null, songStep=0, nextNote=0;
+function playMusic(name){
+ if(curSong===name)return;
+ curSong=name; songStep=0;
+ nextNote=AC?AC.currentTime+0.06:0;
+}
+function musicTick(){
+ if(!AC||!curSong||muted)return;
+ const s=SONGS[curSong]; if(!s)return;
+ const spb=60/s.bpm/4; // 16分音符1つの長さ（秒）
+ while(nextNote<AC.currentTime+0.14){
+  const i=songStep%s.lead.length;
+  const d=Math.max(0,nextNote-AC.currentTime);
+  if(s.lead[i])tone(mf(s.lead[i]),spb*0.9,{type:'square',vol:0.055,delay:d,dest:musicG});
+  if(s.bass[i])tone(mf(s.bass[i]),spb*0.95,{type:'triangle',vol:0.10,delay:d,dest:musicG});
+  if(s.hat&&i%4===0)hat(d);
+  songStep++; nextNote+=spb;
+ }
+}
+function hat(delay){ // ハイハット（BGM用の短いノイズ）
+ if(!AC)return; makeNoiseBuf();
+ const t=AC.currentTime+delay, s=AC.createBufferSource(), g=AC.createGain(), f=AC.createBiquadFilter();
+ s.buffer=noiseBuf; f.type='highpass'; f.frequency.value=6000;
+ g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.04);
+ s.connect(f); f.connect(g); g.connect(musicG);
+ s.start(t); s.stop(t+0.05);
+}
+
+// ---------- 入力（キーボード＋タッチ） ----------
+const inp={dx:0,dy:0,a:false,b:false,aP:false,bP:false,_pa:false,_pb:false};
+const keys={};
+let vA=false, vB=false;          // 仮想A/Bボタン
+let endTapped=false;             // エンディング中のタップ
+const btnTouch=new Map();        // タッチID→ボタン対応
+
+addEventListener('keydown',e=>{
+ if(e.repeat)return;
+ keys[e.code]=true; ensureAudio();
+ if(state==='title'&&(e.code==='Enter'||e.code==='Space')){titleTap();return}
+ if(e.code==='Digit1')selectItem(0);
+ if(e.code==='Digit2')selectItem(1);
+ if(e.code==='Digit3')selectItem(2);
+ if(e.code==='KeyM')toggleMute();
+ if(e.code==='KeyF')toggleFS();
+ if(e.code==='Escape'||e.code==='KeyP')toggleMenu();
+ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.code]=false});
+
+// フローティングジョイスティック
+const joy={id:null,ox:0,oy:0,dx:0,dy:0};
+const stickBase=$('stickBase'), stickKnob=$('stickKnob');
+function joyStart(t){
+ joy.id=t.identifier; joy.ox=t.clientX; joy.oy=t.clientY; joy.dx=joy.dy=0;
+ stickBase.style.display='block';
+ stickBase.style.left=(t.clientX-52)+'px';
+ stickBase.style.top=(t.clientY-52)+'px';
+ stickKnob.style.left='27px'; stickKnob.style.top='27px';
+}
+function joyMove(t){
+ let dx=t.clientX-joy.ox, dy=t.clientY-joy.oy;
+ const len=Math.hypot(dx,dy), max=44;
+ if(len>max){dx=dx/len*max; dy=dy/len*max}
+ stickKnob.style.left=(27+dx)+'px'; stickKnob.style.top=(27+dy)+'px';
+ const dead=7;
+ joy.dx=Math.abs(dx)<dead?0:dx/max;
+ joy.dy=Math.abs(dy)<dead?0:dy/max;
+}
+function joyEnd(){joy.id=null;joy.dx=joy.dy=0;stickBase.style.display='none'}
+
+addEventListener('touchstart',e=>{
+ ensureAudio();
+ for(const t of e.changedTouches){
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  if(el&&(el.closest('#topBtns')||el.closest('.ov')||el.closest('#itemBar')))continue;
+  if(el===$('btnA')){vA=true;$('btnA').classList.add('on');btnTouch.set(t.identifier,'a');continue}
+  if(el===$('btnB')){vB=true;$('btnB').classList.add('on');btnTouch.set(t.identifier,'b');continue}
+  if(state==='title'){titleTap();continue}
+  if(state==='ending'){endTapped=true;continue}
+  if(t.clientX<innerWidth*0.55&&joy.id===null)joyStart(t);   // 左側→スティック
+  else if(state==='dialog')dialogA();                         // 右側タップで会話送り
+ }
+ if(e.cancelable)e.preventDefault();
+},{passive:false});
+addEventListener('touchmove',e=>{
+ for(const t of e.changedTouches)if(t.identifier===joy.id)joyMove(t);
+ if(e.cancelable)e.preventDefault();
+},{passive:false});
+function touchEnd(e){
+ for(const t of e.changedTouches){
+  if(t.identifier===joy.id)joyEnd();
+  const b=btnTouch.get(t.identifier);
+  if(b==='a'){vA=false;$('btnA').classList.remove('on')}
+  if(b==='b'){vB=false;$('btnB').classList.remove('on')}
+  btnTouch.delete(t.identifier);
+ }
+}
+addEventListener('touchend',touchEnd);
+addEventListener('touchcancel',touchEnd);
+addEventListener('contextmenu',e=>e.preventDefault());
+
+// デスクトップ用：マウスでもA/Bを押せる
+$('btnA').addEventListener('mousedown',()=>{ensureAudio();vA=true});
+$('btnB').addEventListener('mousedown',()=>{ensureAudio();vB=true});
+addEventListener('mouseup',()=>{vA=false;vB=false});
+
+// 入力の集約（毎ステップ呼び出し）
+function pollInput(){
+ let dx=joy.dx, dy=joy.dy;
+ if(keys['ArrowLeft']||keys['KeyA'])dx=-1;
+ if(keys['ArrowRight']||keys['KeyD'])dx=1;
+ if(keys['ArrowUp']||keys['KeyW'])dy=-1;
+ if(keys['ArrowDown']||keys['KeyS'])dy=1;
+ const l=Math.hypot(dx,dy); if(l>1){dx/=l;dy/=l}
+ inp.dx=dx; inp.dy=dy;
+ const a=vA||keys['Space']||keys['KeyZ']||keys['KeyJ']||keys['Enter'];
+ const b=vB||keys['KeyX']||keys['KeyK']||keys['ShiftLeft']||keys['ShiftRight'];
+ inp.aP=a&&!inp._pa; inp.bP=b&&!inp._pb;
+ inp.a=a; inp.b=b; inp._pa=a; inp._pb=b;
+}
+
+// ---------- 画面フィット（レスポンシブ） ----------
+const wrap=$('wrap');
+function fit(){
+ const vw=innerWidth, vh=innerHeight;
+ let s;
+ if(vh>vw){ // 縦持ち：上部にゲーム画面、下は操作スペース
+  s=Math.min(vw/W,(vh*0.60)/H);
+  wrap.style.justifyContent='flex-start';
+  wrap.style.paddingTop='calc(8px + env(safe-area-inset-top))';
+ }else{     // 横持ち：中央に最大表示（操作は左右にオーバーレイ）
+  s=Math.min(vw/W,vh/H)*0.97;
+  wrap.style.justifyContent='center';
+  wrap.style.paddingTop='0';
+ }
+ s=Math.max(1,Math.floor(s*4)/4); // ドットのにじみを抑える
+ cv.style.width=(W*s)+'px';
+ cv.style.height=(H*s)+'px';
+}
+addEventListener('resize',fit);
+addEventListener('orientationchange',()=>setTimeout(fit,200));
+
+function toggleFS(){
+ const el=document.documentElement;
+ if(document.fullscreenElement){if(document.exitFullscreen)document.exitFullscreen()}
+ else if(el.requestFullscreen)el.requestFullscreen();
+ else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+}
+document.addEventListener('visibilitychange',()=>{
+ if(!AC)return;
+ if(document.hidden)AC.suspend(); else AC.resume();
+});
+
+// ---------- タイル定義 ----------
+const T={GRASS:0,GRASS2:1,FLOWER:2,TREE:3,WATER:4,SAND:5,PATH:6,MTN:7,BRIDGE:8,
+ WALL:9,FLOOR:10,FLOOR2:11,DOOR_L:12,DOOR_B:13,DOOR_C:14,CHEST:15,CHEST_O:16,
+ BLOCK:17,SW_OFF:18,SW_ON:19,ENT:20,STAIR_U:21,SIGN:22,BARRIER:23,PILLAR:24,
+ RUIN:25,CWALL:26,TORCH:27,EYE:28,EYE_ON:29,
+ SEAL:30,BRAZIER:31,BRAZIER_ON:32,CRYS_OFF:33,CRYS_ON:34,SPIKE:35,DOOR_F:36,LAVA:37,
+ ICE:38,ICEBLK:39};
+// 通行できないタイル（ENT/STAIR/スイッチ/橋は通行可）
+const SOLID=new Set([T.TREE,T.WATER,T.MTN,T.WALL,T.DOOR_L,T.DOOR_B,T.DOOR_C,
+ T.CHEST,T.CHEST_O,T.BLOCK,T.SIGN,T.BARRIER,T.PILLAR,T.CWALL,T.TORCH,T.EYE,T.EYE_ON,
+ T.SEAL,T.BRAZIER,T.BRAZIER_ON,T.CRYS_OFF,T.CRYS_ON,T.DOOR_F,T.LAVA,T.ICEBLK]);
+const NTILE=40;
+
+// ---------- タイルアトラス（起動時に1回だけ手続き描画で生成） ----------
+const atlas=document.createElement('canvas');
+atlas.width=NTILE*TS; atlas.height=2*TS; // 2行=アニメ2フレーム
+const ax=atlas.getContext('2d');
+function drawTile(g,id,f){ // f=アニメフレーム(0/1)
+ const R=(x,y,w,h,c)=>{g.fillStyle=c;g.fillRect(x,y,w,h)};
+ switch(id){
+  case T.GRASS: R(0,0,16,16,'#57a63f');R(3,4,1,1,'#4c9636');R(11,9,1,1,'#4c9636');R(6,13,1,1,'#63b44a');break;
+  case T.GRASS2:R(0,0,16,16,'#57a63f');R(2,3,2,1,'#3f8a30');R(9,6,2,1,'#3f8a30');R(5,11,2,1,'#3f8a30');R(12,12,2,1,'#3f8a30');break;
+  case T.FLOWER:R(0,0,16,16,'#57a63f');R(4,4,2,2,'#ffe08a');R(3,3,1,1,'#ff8ab0');R(6,3,1,1,'#ff8ab0');R(3,6,1,1,'#ff8ab0');R(6,6,1,1,'#ff8ab0');R(10,9,2,2,'#ffffff');break;
+  case T.TREE:  R(0,0,16,16,'#57a63f');R(6,11,4,4,'#6e4a26');R(2,2,12,9,'#2f7a2a');R(3,1,10,2,'#3c8f33');R(4,3,3,2,'#54ab45');break;
+  case T.WATER: R(0,0,16,16,'#2f6fd6');if(f){R(2,4,4,1,'#6ea4f0');R(9,10,4,1,'#6ea4f0')}else{R(4,7,4,1,'#6ea4f0');R(11,3,3,1,'#6ea4f0')}break;
+  case T.SAND:  R(0,0,16,16,'#e0c987');R(4,5,1,1,'#c9b070');R(11,10,1,1,'#c9b070');break;
+  case T.PATH:  R(0,0,16,16,'#cdaa66');R(2,3,2,1,'#ba9755');R(10,8,2,1,'#ba9755');R(6,12,2,1,'#ba9755');break;
+  case T.MTN:   R(0,0,16,16,'#7b7264');R(0,12,16,4,'#5d564b');R(2,2,5,4,'#948a79');R(9,5,5,4,'#948a79');R(4,1,2,2,'#a99f8d');break;
+  case T.BRIDGE:R(0,0,16,16,'#2f6fd6');R(0,2,16,12,'#a8763e');R(0,2,16,1,'#c79256');R(0,13,16,1,'#7a5527');for(let i=2;i<16;i+=4)R(i,3,1,10,'#8a6132');break;
+  case T.WALL:{ R(0,0,16,16,'#4c5566');for(let yy=0;yy<16;yy+=4){R(0,yy,16,1,'#3a4150');for(let xx=(yy%8?0:3);xx<16;xx+=6)R(xx,yy+1,1,3,'#3a4150')}break}
+  case T.FLOOR: R(0,0,16,16,'#b7a184');R(0,0,1,16,'#a08a6d');R(0,0,16,1,'#a08a6d');break;
+  case T.FLOOR2:R(0,0,16,16,'#b7a184');R(3,3,10,10,'#ab9578');R(5,5,6,6,'#b7a184');break;
+  case T.DOOR_L:R(0,0,16,16,'#4c5566');R(2,1,12,15,'#7d5a34');R(3,2,10,14,'#8f6a40');R(6,7,4,5,'#ffe066');R(7,8,2,2,'#7d5a34');break;
+  case T.DOOR_B:R(0,0,16,16,'#4c5566');R(2,1,12,15,'#5a2e6e');R(3,2,10,14,'#7a3f92');R(6,7,4,6,'#ffd23e');R(7,5,2,2,'#ffd23e');break;
+  case T.DOOR_C:R(0,0,16,16,'#4c5566');R(2,1,12,15,'#6b7284');R(3,2,10,14,'#7d869a');R(4,7,8,2,'#4c5566');break;
+  case T.CHEST: R(0,0,16,16,'#b7a184');R(2,4,12,10,'#8a5a28');R(2,4,12,3,'#a8763e');R(2,8,12,1,'#5f3c17');R(6,8,4,3,'#ffd23e');break;
+  case T.CHEST_O:R(0,0,16,16,'#b7a184');R(2,6,12,8,'#8a5a28');R(3,7,10,6,'#3c2408');R(2,4,12,2,'#a8763e');break;
+  case T.BLOCK: R(0,0,16,16,'#7a8298');R(1,1,14,14,'#8d96ac');R(1,1,14,2,'#a2abc2');R(1,13,14,2,'#6a7286');R(4,5,8,6,'#7a8298');break;
+  case T.SW_OFF:R(0,0,16,16,'#b7a184');R(4,4,8,8,'#6a7286');R(5,5,6,6,'#c8503c');break;
+  case T.SW_ON: R(0,0,16,16,'#b7a184');R(4,4,8,8,'#6a7286');R(5,5,6,6,'#50c86a');break;
+  case T.ENT:   R(0,0,16,16,'#20242c');R(4,0,8,16,'#000000');R(0,0,2,16,'#4c5566');R(14,0,2,16,'#4c5566');break;
+  case T.STAIR_U:R(0,0,16,16,'#b7a184');for(let i=0;i<5;i++)R(2,13-i*3,12,2,'#d8c6a8');break;
+  case T.SIGN:  R(0,0,16,16,'#57a63f');R(3,3,10,7,'#a8763e');R(4,4,8,5,'#c79256');R(7,10,2,5,'#6e4a26');R(5,5,6,1,'#6e4a26');R(5,7,4,1,'#6e4a26');break;
+  case T.BARRIER:R(0,0,16,16,'#3a1454');if(f){R(3,1,2,14,'#b45ae0');R(11,1,2,14,'#b45ae0');R(6,1,4,2,'#e08aff')}else{R(5,1,2,14,'#b45ae0');R(9,1,2,14,'#b45ae0');R(6,13,4,2,'#e08aff')}break;
+  case T.PILLAR:R(0,0,16,16,'#8f8f98');R(4,1,8,14,'#c2c2cc');R(3,0,10,2,'#d8d8e0');R(3,14,10,2,'#7c7c88');R(6,3,2,10,'#aeaeba');break;
+  case T.RUIN:  R(0,0,16,16,'#8f8f98');R(0,0,16,1,'#9c9ca6');R(0,0,1,16,'#9c9ca6');R(8,8,3,1,'#7c7c88');R(3,12,2,1,'#7c7c88');break;
+  case T.CWALL:{R(0,0,16,16,'#5a5f73');for(let yy=0;yy<16;yy+=4){R(0,yy,16,1,'#454a5c');for(let xx=(yy%8?1:4);xx<16;xx+=6)R(xx,yy+1,1,3,'#454a5c')}break}
+  case T.TORCH: R(0,0,16,16,'#4c5566');R(6,8,4,6,'#7d5a34');if(f){R(5,3,6,5,'#ff9a2a');R(6,1,4,4,'#ffd23e')}else{R(5,4,6,4,'#ff9a2a');R(7,2,3,3,'#ffd23e')}break;
+  case T.EYE:   R(0,0,16,16,'#5a5f73');R(3,4,10,8,'#d8d8e0');R(6,6,4,4,'#c83c3c');R(7,7,2,2,'#000000');break;
+  case T.EYE_ON:R(0,0,16,16,'#5a5f73');R(3,4,10,8,'#d8d8e0');R(4,7,8,2,'#444444');break;
+  case T.SEAL:  R(0,0,16,16,'#2a0e3e');if(f){R(2,2,3,12,'#c85aff');R(7,1,2,14,'#8a2ae0');R(11,2,3,12,'#c85aff')}else{R(2,2,2,12,'#8a2ae0');R(6,1,3,14,'#c85aff');R(12,2,2,12,'#8a2ae0')}R(1,0,14,2,'#5a1a8e');R(1,14,14,2,'#5a1a8e');break;
+  case T.BRAZIER:R(0,0,16,16,'#b7a184');R(4,8,8,5,'#5f6a7e');R(3,12,10,2,'#4c5566');R(5,5,6,3,'#3a4150');break;
+  case T.BRAZIER_ON:R(0,0,16,16,'#b7a184');R(4,8,8,5,'#5f6a7e');R(3,12,10,2,'#4c5566');R(4,3,8,5,'#ff9a2a');R(6,1,4,4,'#ffd23e');break;
+  case T.CRYS_OFF:R(0,0,16,16,'#b7a184');R(6,12,4,2,'#6a7286');R(5,4,6,8,'#5a6a8e');R(7,2,2,3,'#5a6a8e');R(6,5,2,4,'#7a8ab0');break;
+  case T.CRYS_ON:R(0,0,16,16,'#b7a184');R(6,12,4,2,'#6a7286');R(5,4,6,8,'#5ae0e8');R(7,2,2,3,'#5ae0e8');R(6,5,2,4,'#c8fbff');break;
+  case T.SPIKE: R(0,0,16,16,'#a89478');if(f){for(let i=0;i<4;i++){R(2+i*4,10,2,4,'#d8d8e0');R(2+i*4,8,2,2,'#f0f0f8')}}else{for(let i=0;i<4;i++)R(3+i*4,12,1,2,'#8a8a92')}break;
+  case T.DOOR_F:R(0,0,16,16,'#4c5566');R(2,1,12,15,'#8e4a2a');R(3,2,10,14,'#b06038');R(5,6,6,6,'#ff9a2a');R(7,4,2,3,'#ffd23e');break;
+  case T.ICE:   R(0,0,16,16,'#a8d8ec');R(0,0,16,1,'#cfeefa');R(0,0,1,16,'#cfeefa');R(3,4,6,1,'#e8f8ff');R(9,10,5,1,'#e8f8ff');R(11,3,2,2,'#8ec0d8');break;
+  case T.ICEBLK:R(0,0,16,16,'#a8d8ec');R(1,1,14,14,'#7ec4e0');R(2,2,12,3,'#b8e4f4');R(2,11,12,3,'#5ea6c8');R(4,6,4,4,'#cfeefa');break;
+  case T.LAVA:  R(0,0,16,16,'#d84018');if(f){R(2,3,5,2,'#ffb040');R(9,9,5,2,'#ffb040');R(5,12,3,1,'#ff7830')}else{R(4,7,5,2,'#ffb040');R(11,3,3,2,'#ffb040');R(2,12,4,1,'#ff7830')}break;
+ }
+}
+function buildAtlas(){
+ for(let f=0;f<2;f++)for(let id=0;id<NTILE;id++){
+  ax.save(); ax.translate(id*TS,f*TS);
+  drawTile(ax,id,f);
+  ax.restore();
+ }
+}
+// タイル1枚を画面に描く（水・松明・結界だけアニメ）
+const ANIM_TILES=new Set([T.WATER,T.TORCH,T.BARRIER,T.SEAL,T.LAVA]);
+
+// ---------- アイテムアイコン（16x16、スロット用） ----------
+function drawIcon(g,type){
+ g.clearRect(0,0,16,16);
+ const R=(x,y,w,h,c)=>{g.fillStyle=c;g.fillRect(x,y,w,h)};
+ if(type==='bow'){
+  g.strokeStyle='#a8763e'; g.lineWidth=2;
+  g.beginPath(); g.arc(5,8,6,-Math.PI/2,Math.PI/2); g.stroke();
+  g.strokeStyle='#e8e8e8'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(5,2); g.lineTo(5,14); g.stroke();
+  R(4,7,9,2,'#d8d8e0');
+  g.fillStyle='#ffd23e';
+  g.beginPath(); g.moveTo(15,8); g.lineTo(11,5); g.lineTo(11,11); g.closePath(); g.fill();
+ }else if(type==='boomerang'){
+  R(3,2,4,11,'#e8b04a'); R(3,9,11,4,'#e8b04a');
+  R(4,3,2,9,'#c78d2e'); R(5,10,8,2,'#c78d2e');
+  R(3,2,4,2,'#f2cf7a'); R(12,9,2,4,'#f2cf7a');
+ }else if(type==='potion'){
+  R(6,1,4,2,'#8a5a28'); R(6,3,4,2,'#d8d8e0');
+  R(4,5,8,10,'#d8d8e0'); R(5,8,6,6,'#e0447a'); R(6,6,2,2,'#f0f0f8');
+ }
+}
+
+// ---------- ハート（HUD・ドロップ共用の7x6ドット） ----------
+function heartPix(x,y,c){
+ cx.fillStyle=c;
+ cx.fillRect(x+1,y,2,1); cx.fillRect(x+4,y,2,1);
+ cx.fillRect(x,y+1,7,2); cx.fillRect(x+1,y+3,5,1);
+ cx.fillRect(x+2,y+4,3,1); cx.fillRect(x+3,y+5,1,1);
+}
+function heartHalf(x,y,c){ // 左半分だけ
+ cx.fillStyle=c;
+ cx.fillRect(x+1,y,2,1); cx.fillRect(x,y+1,4,2);
+ cx.fillRect(x+1,y+3,3,1); cx.fillRect(x+2,y+4,2,1); cx.fillRect(x+3,y+5,1,1);
+}
+
+// ---------- 勇者の描画（手続き的ドット絵） ----------
+function drawHero(x,y){
+ const p=player;
+ if(p.inv>0&&Math.floor(p.inv/3)%2)return; // 無敵中は点滅
+ const f=Math.floor(p.anim/8)%2;
+ let d=p.dir, flip=false;
+ if(d==='l'){d='r';flip=true}
+ cx.save();
+ if(flip){cx.translate(x+16,y);cx.scale(-1,1);x=0;y=0}
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a,y+b,w,h)};
+ cx.fillStyle='rgba(0,0,0,.22)'; cx.fillRect(x+3,y+13,10,3); // 影
+ const legL=f?1:0, legR=f?0:1;
+ if(d==='d'||d==='u'){
+  R(4,12+legL,3,3,'#5a3a1a'); R(9,12+legR,3,3,'#5a3a1a');    // 足
+  R(3,6,10,7,S&&S.tunic?'#3aa0d8':'#e0344a');                // 服
+  R(2,7,2,4,'#e0344a'); R(12,7,2,4,'#e0344a');               // 腕
+  R(4,1,8,6,'#f2c894');                                      // 顔
+  R(3,0,10,3,'#e8b04a'); R(3,2,2,3,'#e8b04a'); R(11,2,2,3,'#e8b04a'); // 髪
+  if(d==='d'){R(5,4,2,2,'#20242c');R(9,4,2,2,'#20242c')}     // 目
+  else R(3,0,10,5,'#e8b04a');                                // 後ろ姿は髪だけ
+  if(S&&S.shield&&d==='d')R(2,8,3,5,'#3c6ed8');              // 盾（正面）
+ }else{ // 横向き（右）
+  R(4,12+legL,3,3,'#5a3a1a'); R(9,12+legR,3,3,'#5a3a1a');
+  R(4,6,9,7,S&&S.tunic?'#3aa0d8':'#e0344a');
+  R(4,1,8,6,'#f2c894');
+  R(3,0,9,3,'#e8b04a'); R(3,2,2,4,'#e8b04a');
+  R(9,3,2,2,'#20242c');                                      // 目
+  if(S&&S.shield)R(12,7,3,5,'#3c6ed8');                      // 盾（前方）
+ }
+ cx.restore();
+}
+// 攻撃中の剣エフェクト
+function drawSwordFx(x,y){
+ const p=player; if(p.atk<=0)return;
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a,y+b,w,h)};
+ const bladeC=(S&&S.sword2)?'#ffd23e':'#e8ecf4'; // マスターソードは金色の刃
+ const d=p.dir;
+ if(d==='d'){R(6,14,3,9,bladeC);R(4,13,7,2,'#a8763e')}
+ else if(d==='u'){R(7,-7,3,9,bladeC);R(5,1,7,2,'#a8763e')}
+ else if(d==='r'){R(14,7,9,3,bladeC);R(13,5,2,7,'#a8763e')}
+ else{R(-7,7,9,3,bladeC);R(1,5,2,7,'#a8763e')}
+}
+
+// ---------- 敵の描画 ----------
+function drawEnemy(e,x,y){
+ const f=Math.floor(perf/12)%2;
+ if(e.hurt>0&&Math.floor(e.hurt/2)%2)cx.globalAlpha=0.45;
+ if(e.stun>0&&Math.floor(perf/6)%2)cx.globalAlpha=0.6;
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a,y+b,w,h)};
+ if(e.t!=='boss'&&e.t!=='dark'&&!MID_TYPES.has(e.t)){cx.fillStyle='rgba(0,0,0,.2)';cx.fillRect(x+3,y+13,10,2)}
+ switch(e.t){
+  case 'slime':{
+   const s=f?1:0;
+   R(3,6+s,10,8-s,'#3ec86a'); R(4,5+s,8,2,'#3ec86a');
+   R(5,8+s,2,2,'#0c3018'); R(9,8+s,2,2,'#0c3018'); R(4,6+s,3,2,'#8af0aa');
+   break}
+  case 'bat':{
+   R(6,5,4,6,'#5a3a7a');
+   if(f){R(1,4,5,3,'#7a5aa0');R(10,4,5,3,'#7a5aa0')}
+   else{R(1,7,5,3,'#7a5aa0');R(10,7,5,3,'#7a5aa0')}
+   R(6,6,1,2,'#ff5a5a'); R(9,6,1,2,'#ff5a5a');
+   break}
+  case 'skel':{
+   R(5,1,6,5,'#e8e8e0'); R(6,3,1,2,'#20242c'); R(9,3,1,2,'#20242c');
+   R(4,6,8,6,'#d8d8cc'); R(3,7,1,4,'#d8d8cc'); R(12,7,1,4,'#d8d8cc');
+   R(5,12+(f?1:0),2,3,'#d8d8cc'); R(9,12+(f?0:1),2,3,'#d8d8cc');
+   break}
+  case 'mage':{
+   R(4,6,8,8,'#4a2a6e'); R(3,13,10,2,'#32204e');
+   R(4,2,8,5,'#f2c894'); R(2,0,12,3,'#32204e'); R(2,2,2,3,'#32204e'); R(12,2,2,3,'#32204e');
+   R(6,4,1,2,'#20242c'); R(9,4,1,2,'#20242c');
+   break}
+  case 'ghost':{ // 壁ぬけゴースト
+   if(Math.floor(perf/30)%2)cx.globalAlpha*=0.55;
+   const fl=Math.sin(perf*0.1)*1.5;
+   R(4,3+fl,8,9,'#cfe0f2'); R(3,10+fl,3,3,'#cfe0f2'); R(10,10+fl,3,3,'#cfe0f2');
+   R(5,6+fl,2,2,'#20242c'); R(9,6+fl,2,2,'#20242c');
+   break}
+  case 'knight':{ // 突進アーマーナイト
+   R(4,1,8,6,'#8a94a8'); R(5,3,6,2,'#20242c');
+   R(3,7,10,6,'#6a7590'); R(2,8,2,4,'#8a94a8'); R(12,8,2,4,'#8a94a8');
+   R(5,13,2,2,'#4a5570'); R(9,13,2,2,'#4a5570');
+   if(e.st==='ready'||e.st==='charge')R(6,8,4,2,'#ffd23e');
+   break}
+  case 'beetle':{ // 直進スパイクビートル
+   R(4,5,8,8,'#c87a2a'); R(3,7,10,4,'#a85f1e');
+   R(5,3,2,3,'#8a4a12'); R(9,3,2,3,'#8a4a12');
+   R(6,7,1,1,'#20242c'); R(9,7,1,1,'#20242c');
+   R(7,5+(f?1:0),2,6,'#e8a04a');
+   break}
+  case 'wolf':{ // とびかかるオオカミ
+   R(3,6,10,6,'#8a7458'); R(2,8,3,3,'#8a7458');
+   R(11,5,4,4,'#8a7458'); R(12,4,2,2,'#6a5840');
+   R(13,6,1,1,'#e03030');
+   R(3,12+(f?1:0),2,3,'#6a5840'); R(9,12+(f?0:1),2,3,'#6a5840');
+   R(1,6,2,2,'#6a5840');
+   if(e.st==='ready'||e.st==='charge')R(5,4,4,2,'#ffd23e');
+   break}
+  case 'archer':{ // ガイコツアーチャー
+   R(5,1,6,5,'#e8e8e0'); R(6,3,1,2,'#20242c'); R(9,3,1,2,'#20242c');
+   R(4,6,8,6,'#8a6a4a'); R(5,12+(f?1:0),2,3,'#d8d8cc'); R(9,12+(f?0:1),2,3,'#d8d8cc');
+   R(12,4,1,8,'#a8763e'); R(13,5,1,6,'#e8e8e8');
+   break}
+  case 'flame':{ // 火の玉スピリット
+   const ff=Math.floor(perf/6)%2;
+   R(5,4+ff,6,8,'#ff7830'); R(6,2+ff,4,4,'#ff9a2a');
+   R(6,6+ff,4,4,'#ffd23e'); R(7,7+ff,2,2,'#fff2b0');
+   break}
+  case 'iceslime':{ // こおりスライム
+   const s2=f?1:0;
+   R(3,6+s2,10,8-s2,'#6ec8e8'); R(4,5+s2,8,2,'#6ec8e8');
+   R(5,8+s2,2,2,'#0c3048'); R(9,8+s2,2,2,'#0c3048');
+   R(4,6+s2,3,2,'#d8f4ff'); R(11,9+s2,2,2,'#d8f4ff');
+   break}
+  case 'imp':{ // インプ（小悪魔）
+   R(5,4,6,7,'#a03858'); R(4,1,8,4,'#c05070');
+   R(3,0,2,2,'#e8d23e'); R(11,0,2,2,'#e8d23e');
+   R(5,2,2,2,'#ffd23e'); R(9,2,2,2,'#ffd23e');
+   if(f){R(1,5,4,3,'#7a2440');R(11,5,4,3,'#7a2440')}
+   else{R(1,7,4,3,'#7a2440');R(11,7,4,3,'#7a2440')}
+   R(6,11,2,3,'#a03858'); R(9,11,2,3,'#a03858');
+   break}
+  case 'turret':{ // 石像ほうだい
+   R(3,10,10,5,'#7a7a86'); R(4,4,8,7,'#9a9aa6');
+   R(5,1,6,4,'#8a8a96');
+   const glow=(e.tmr%120)>100?'#ff5a3c':'#5a3a3a';
+   R(6,6,2,2,glow); R(9,6,2,2,glow);
+   R(2,6,2,4,'#7a7a86'); R(12,6,2,4,'#7a7a86');
+   break}
+  case 'gslime': drawMidGSlime(e,x,y); break;
+  case 'gbat':   drawMidGBat(e,x,y);   break;
+  case 'dknight':drawMidDKnight(e,x,y);break;
+  case 'golem':  drawMidGolem(e,x,y);  break;
+  case 'dragon': drawMidDragon(e,x,y); break;
+  case 'shadow':{ // 影の分身
+   cx.globalAlpha*=0.75;
+   R(4,4,8,9,'#1a1030'); R(3,6,2,5,'#2a1a4a'); R(11,6,2,5,'#2a1a4a');
+   R(5,6,2,2,'#c85aff'); R(9,6,2,2,'#c85aff');
+   R(4,13,3,2,'#1a1030'); R(9,13,3,2,'#1a1030');
+   break}
+  case 'dark': drawDark(e,x,y); break;
+  case 'boss': drawBoss(e,x,y); break;
+ }
+ cx.globalAlpha=1;
+}
+// 魔王バルガン（32x32：2倍スケールで描画）
+function drawBoss(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const f=Math.floor(perf/14)%2;
+ const cape=e.phase===2?'#c83c3c':'#5a2a7a';
+ const eyeC=e.phase===2?'#ff3c3c':'#a03cff';
+ cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(x+4,y+28,24,4);   // 影
+ R(2,5+(f?0:1),12,9,cape);                                     // マント
+ R(3,4,10,8,'#2a2a34');                                        // 体
+ R(4,0,8,5,'#d8c8e8');                                         // 顔
+ R(2,0,2,2,'#e8d23e'); R(12,0,2,2,'#e8d23e');                  // 角
+ R(5,2,2,2,eyeC); R(9,2,2,2,eyeC);                             // 目
+ R(4,13,3,3,'#2a2a34'); R(9,13,3,3,'#2a2a34');                 // 足
+}
+// 中ボス：キングスライム（2倍スケール）
+function drawMidGSlime(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const s=(e.st==='lunge')?0:(Math.floor(perf/12)%2?1:0);
+ cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(x+4,y+28,24,4);
+ R(2,5+s,12,10-s,'#2ea85a'); R(3,3+s,10,3,'#2ea85a');
+ R(4,7+s,3,3,'#0c3018'); R(9,7+s,3,3,'#0c3018');
+ R(3,5+s,4,2,'#8af0aa'); R(5,11+s,6,2,'#0c3018');
+ R(5,1+s,6,2,'#ffd23e'); R(5,0+s,1,1,'#ffd23e'); R(10,0+s,1,1,'#ffd23e'); // 王冠
+}
+// 中ボス：オオコウモリ（2倍スケール）
+function drawMidGBat(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const f2=Math.floor(perf/8)%2;
+ cx.fillStyle='rgba(0,0,0,.25)'; cx.fillRect(x+6,y+28,20,3);
+ R(6,4,4,8,'#4a2a6e');
+ if(f2){R(0,2,6,4,'#6a4a90');R(10,2,6,4,'#6a4a90')}
+ else{R(0,6,6,4,'#6a4a90');R(10,6,6,4,'#6a4a90')}
+ R(6,6,1,2,'#ff5a5a'); R(9,6,1,2,'#ff5a5a');
+ R(6,12,1,2,'#d8d8e0'); R(9,12,1,2,'#d8d8e0');
+}
+// 中ボス：デスナイト（2倍スケール）
+function drawMidDKnight(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(x+4,y+28,24,4);
+ R(4,0,8,6,'#3a4150'); R(5,2,6,2,'#c83c3c');
+ R(3,6,10,7,'#2a3040'); R(1,7,2,5,'#3a4150'); R(13,7,2,5,'#3a4150');
+ R(5,13,3,3,'#20242c'); R(9,13,3,3,'#20242c');
+ R(14,3,2,10,'#8a94a8');
+ if(e.st==='ready'||e.st==='charge')R(4,7,8,3,'#ffd23e');
+}
+// 中ボス：マグマゴーレム（2倍スケール）
+function drawMidGolem(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const up=e.st==='ready'?-1:0;
+ cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(x+4,y+28,24,4);
+ R(3,3+up,10,10,'#5a4a44');
+ R(1,5+up,3,6,'#5a4a44'); R(12,5+up,3,6,'#5a4a44');
+ R(4,13,3,3,'#4a3c38'); R(9,13,3,3,'#4a3c38');
+ R(5,5+up,2,2,'#ff9a2a'); R(9,5+up,2,2,'#ff9a2a');
+ R(6,9+up,4,1,'#ff7830'); R(4,11+up,2,1,'#ff7830'); R(10,7+up,2,1,'#ff7830');
+}
+// 中ボス：フロストドラゴン（2倍スケール）
+function drawMidDragon(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const f2=Math.floor(perf/10)%2;
+ cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(x+4,y+28,24,4);
+ if(f2){R(0,2,4,6,'#5a9ec8');R(12,2,4,6,'#5a9ec8')}
+ else{R(0,4,4,6,'#5a9ec8');R(12,4,4,6,'#5a9ec8')}
+ R(4,5,8,8,'#8ed4ec');
+ R(5,1,6,5,'#a8e4f8'); R(4,3,2,2,'#a8e4f8'); R(10,3,2,2,'#a8e4f8');
+ R(6,2,1,2,'#1a3a5a'); R(9,2,1,2,'#1a3a5a');
+ R(7,5,2,2,'#d8f4ff');
+ R(4,13,3,3,'#6ec0dc'); R(9,13,3,3,'#6ec0dc');
+ if(e.st==='breath')R(6,6,4,2,'#e8faff');
+}
+// 裏ボス：影の王ネビュラ（2倍スケール）
+function drawDark(e,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a*2,y+b*2,w*2,h*2)};
+ const f2=Math.floor(perf/10)%2;
+ const aura=e.phase===3?'#ff3c6a':e.phase===2?'#c85aff':'#7a3ce0';
+ cx.fillStyle='rgba(0,0,0,.35)'; cx.fillRect(x+2,y+28,28,4);
+ // ゆらめく闇のマント
+ if(f2){R(1,4,14,12,'#150a28')}else{R(2,5,12,11,'#150a28')}
+ R(3,3,10,10,'#241040');
+ // 王冠のような角
+ R(2,0,2,3,aura); R(12,0,2,3,aura); R(7,0,2,2,aura);
+ // 顔（闇のなかの目）
+ R(4,3,8,5,'#0a0418');
+ R(5,4,2,2,aura); R(9,4,2,2,aura);
+ // 胸の紋章
+ R(6,9,4,4,aura); R(7,10,2,2,'#ffffff');
+ if(e.st==='cast'){R(0,2,2,10,aura);R(14,2,2,10,aura)}
+}
+// NPC（老人・商人）
+function drawNPC(n,x,y){
+ const R=(a,b,w,h,c)=>{cx.fillStyle=c;cx.fillRect(x+a,y+b,w,h)};
+ cx.fillStyle='rgba(0,0,0,.2)'; cx.fillRect(x+3,y+13,10,2);
+ if(n.kind==='oldman'){
+  R(4,7,8,7,'#8a8a92'); R(4,1,8,6,'#f2c894');
+  R(3,0,10,2,'#e8e8e0'); R(5,4,2,1,'#20242c'); R(9,4,2,1,'#20242c');
+  R(5,6,6,2,'#e8e8e0');                                        // ひげ
+  R(12,6,2,8,'#a8763e');                                       // 杖
+ }else{
+  const cloth=n.kind==='merchant'?'#c83c50':'#3c78c8';
+  R(4,7,8,7,cloth); R(4,1,8,6,'#f2c894');
+  R(3,0,10,3,'#6e4a26'); R(5,4,2,1,'#20242c'); R(9,4,2,1,'#20242c');
+ }
+}
+
+// ---------- ダンジョンマップ（文字列定義） ----------
+// # 壁  . 床  , 飾り床  D 鍵扉  M ボス扉  d しかけ扉  B 押しブロック
+// s スイッチ  T 松明  W 水  = 橋  * 柱  X 出口階段
+// a スライム b コウモリ c ガイコツ m メイジ g ゴースト k ナイト e ビートル
+// w オオカミ h アーチャー o 火の玉スピリット
+// i こおりスライム p インプ t 石像ほうだい  R ボス  G 中ボス
+// f 炎の扉  r かがり火  q クリスタル  ^ トゲ床  L 溶岩  I こおり床  J こおりブロック
+// C 目玉アイテム F 紋章 H いのちのうつわ K カギ $ コイン Q ボスキー
+const CHEST_ITEM={
+ d1:{C:'bow',F:'crest',H:'heart',K:'key','$':'coins'},
+ d2:{C:'boomerang',F:'crest',H:'heart',K:'key','$':'coins'},
+ castle:{Q:'bossKey',H:'heart',K:'key','$':'coins'},
+ d3:{C:'sword2',F:'crest',K:'key','$':'coins',P:'potion'},
+ d4:{C:'tunic',F:'crest',K:'key','$':'coins',H:'heart'},
+ abyss:{H:'heart',K:'key','$':'coins'},
+};
+const WROW='##############################';
+
+// 森の神殿（中ボス：キングスライム／かがり火・ブロックのしかけ）
+const D1_ROWS=[
+ WROW,
+ '#T....F....T#####T....H.....T#',
+ '#...........#####............#',
+ '#....g......#####......g.....#',
+ '#######.##############.#######',
+ '#####T........C.........T#####',
+ '#####....................#####',
+ '#####....................#####',
+ '#####.........G..........#####',
+ '#####....................#####',
+ '#####....................#####',
+ '#####....................#####',
+ '##############D###############',
+ '#...........#...#............#',
+ '#...k.......#...#.....K......#',
+ '#....B..s...#...#............#',
+ '#...........#.d.#######f######',
+ '#.....e.....#...#..r.....r...#',
+ '#...........#...#........c...#',
+ '#...........#...#............#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..a.....b........a......b...#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+// みずうみの祠（中ボス：オオコウモリ／クリスタル・ブロックのしかけ）
+const D2_ROWS=[
+ WROW,
+ '#T....F....T#####T....H.....T#',
+ '#...........#####............#',
+ '#......g....#####....b.......#',
+ '#######.##############.#######',
+ '#####T........C.........T#####',
+ '#####WW................WW#####',
+ '#####....................#####',
+ '#####.........G..........#####',
+ '#####....................#####',
+ '#####WW................WW#####',
+ '#####....................#####',
+ '##############D###############',
+ '#...........#...#............#',
+ '#...B.......#...#.....K......#',
+ '#..W.W......#...#............#',
+ '#...........#.d.#######f######',
+ '#...s.......#...#........W...#',
+ '#.$.........#...#.......WqW..#',
+ '#...........#...#........W...#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..b.....e........b......g...#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+// 魔王城（中ボス：デスナイト／2連スイッチ・トゲ床）
+const CASTLE_ROWS=[
+ WROW,
+ '###T......................T###',
+ '###........................###',
+ '###........................###',
+ '###...........R............###',
+ '###........................###',
+ '###....*..............*....###',
+ '###........................###',
+ '###....*..............*....###',
+ '###........................###',
+ '##############M###############',
+ '#T.....T#...Q........#T.....T#',
+ '#..H....#............#...$...#',
+ '#.......#.....G......#.......#',
+ '#.......#............#.......#',
+ '#.......#............#.......#',
+ '#.......#............#.......#',
+ '####D#########d##########D####',
+ '#...........#...#............#',
+ '#..B....B...#^^^#..k......k..#',
+ '#...........#...#............#',
+ '#....ss.....#^^^#....K..K....#',
+ '#..k........#...#.....e......#',
+ '#...........#...#............#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..c....m........c.....m.....#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+
+// ようがんの洞窟（中ボス：マグマゴーレム／かがり火・ブロック・トゲ床）
+const D3_ROWS=[
+ WROW,
+ '#T....F....T#####T....P.....T#',
+ '#...........#####............#',
+ '#....o......#####......o.....#',
+ '#######.##############.#######',
+ '#####T........C.........T#####',
+ '#####LL................LL#####',
+ '#####....................#####',
+ '#####.........G..........#####',
+ '#####....................#####',
+ '#####LL................LL#####',
+ '#####....................#####',
+ '##############D###############',
+ '#...........#...#............#',
+ '#...B.......#^^^#.....K......#',
+ '#..L.L......#...#............#',
+ '#...........#.d.#######f######',
+ '#...s.......#...#..r.....r...#',
+ '#.h.........#^^^#........w...#',
+ '#...........#...#............#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..w.....h........c......m...#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+// こおりの神殿（中ボス：フロストドラゴン／こおり床・クリスタル・ブロック）
+const D4_ROWS=[
+ WROW,
+ '#T....F....T#####T....H.....T#',
+ '#...........#####............#',
+ '#....i......#####......p.....#',
+ '#######.##############.#######',
+ '#####T........C.........T#####',
+ '#####IIII..........IIII..#####',
+ '#####IIII..........IIII..#####',
+ '#####.........G..........#####',
+ '#####IIII..........IIII..#####',
+ '#####IIII..........IIII..#####',
+ '#####....................#####',
+ '##############D###############',
+ '#...........#...#............#',
+ '#...B.......#III#.....K......#',
+ '#..J.J......#III#............#',
+ '#...........#.d.#######f######',
+ '#...s.......#III#..t....WWW..#',
+ '#.p.........#III#.......WqW..#',
+ '#...........#...#.......WWW..#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..i.....p........t......i...#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+// 深淵（裏ボス：影の王ネビュラ）— 魔王撃破後にあらわれる隠しダンジョン
+const ABYSS_ROWS=[
+ WROW,
+ '###T......................T###',
+ '###........................###',
+ '###........................###',
+ '###...........Z............###',
+ '###........................###',
+ '###....*..............*....###',
+ '###........................###',
+ '###....*..............*....###',
+ '###........................###',
+ '##############.###############',
+ '#............................#',
+ '#....H..............$........#',
+ '#.......c......m.....c.......#',
+ '#............................#',
+ '#####.########.#######.#######',
+ '#............................#',
+ '#..p....h........o.....w.....#',
+ '#............................#',
+ '#..............X.............#',
+ '#............................#',
+ WROW,
+];
+// 文字列マップ→タイル配列に変換
+function parseDungeon(id,rows,w){
+ const h=rows.length, t=new Uint8Array(w*h);
+ const m={id,w,h,t,chests:{},spawns:[],switches:[],warps:{},signs:{},npcs:[]};
+ for(let y=0;y<h;y++){
+  const r=rows[y];
+  if(r.length!==w)console.warn('マップ行長エラー',id,y,r.length);
+  for(let x=0;x<w;x++){
+   const c=r[x]||'#'; let tid=T.FLOOR;
+   switch(c){
+    case '#':tid=T.WALL;break;
+    case '.':tid=T.FLOOR;break;
+    case ',':tid=T.FLOOR2;break;
+    case 'D':tid=T.DOOR_L;break;
+    case 'M':tid=T.DOOR_B;break;
+    case 'd':tid=T.DOOR_C;break;
+    case 'B':tid=T.BLOCK;break;
+    case 's':tid=T.SW_OFF;m.switches.push(x+','+y);break;
+    case 'T':tid=T.TORCH;break;
+    case 'W':tid=T.WATER;break;
+    case '=':tid=T.BRIDGE;break;
+    case '*':tid=T.PILLAR;break;
+    case 'X':tid=T.STAIR_U;break;
+    case 'a':m.spawns.push({t:'slime',x,y});break;
+    case 'b':m.spawns.push({t:'bat',x,y});break;
+    case 'c':m.spawns.push({t:'skel',x,y});break;
+    case 'm':m.spawns.push({t:'mage',x,y});break;
+    case 'R':m.spawns.push({t:'boss',x,y});break;
+    case 'Z':m.spawns.push({t:'dark',x,y});break;
+    case 'G':m.spawns.push({t:'mid',x,y});break;
+    case 'g':m.spawns.push({t:'ghost',x,y});break;
+    case 'k':m.spawns.push({t:'knight',x,y});break;
+    case 'e':m.spawns.push({t:'beetle',x,y});break;
+    case 'f':tid=T.DOOR_F;break;
+    case 'r':tid=T.BRAZIER;break;
+    case 'q':tid=T.CRYS_OFF;break;
+    case '^':tid=T.SPIKE;break;
+    case 'L':tid=T.LAVA;break;
+    case 'I':tid=T.ICE;break;
+    case 'J':tid=T.ICEBLK;break;
+    case 'i':m.spawns.push({t:'iceslime',x,y});break;
+    case 'p':m.spawns.push({t:'imp',x,y});break;
+    case 't':m.spawns.push({t:'turret',x,y});break;
+    case 'w':m.spawns.push({t:'wolf',x,y});break;
+    case 'h':m.spawns.push({t:'archer',x,y});break;
+    case 'o':m.spawns.push({t:'flame',x,y});break;
+    default:
+     if(CHEST_ITEM[id]&&CHEST_ITEM[id][c]){tid=T.CHEST;m.chests[x+','+y]=CHEST_ITEM[id][c]}
+   }
+   t[y*w+x]=tid;
+  }
+ }
+ return m;
+}
+
+// ---------- オーバーワールド生成（100x80、シード固定） ----------
+function buildOverworld(){
+ const w=100, h=80, t=new Uint8Array(w*h);
+ const rnd=mulberry32(20260719);
+ const set=(x,y,v)=>{if(x>=0&&y>=0&&x<w&&y<h)t[y*w+x]=v};
+ const get=(x,y)=>(x<0||y<0||x>=w||y>=h)?T.MTN:t[y*w+x];
+ // 草原ベース＋装飾
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  const r=rnd(); t[y*w+x]=r<0.06?T.GRASS2:r<0.10?T.FLOWER:T.GRASS;
+ }
+ // まばらな木
+ for(let i=0;i<180;i++){
+  const x=3+Math.floor(rnd()*(w-6)), y=3+Math.floor(rnd()*(h-6));
+  if(rnd()<0.55)set(x,y,T.TREE);
+ }
+ // 西のまよいの森
+ for(let y=10;y<=46;y++)for(let x=6;x<=36;x++)if(rnd()<0.62)set(x,y,T.TREE);
+ // 東のみずうみ（楕円）＋砂浜
+ for(let y=38;y<=62;y++)for(let x=60;x<=92;x++){
+  const e=Math.pow((x-76)/13,2)+Math.pow((y-50)/9,2);
+  if(e<=1)set(x,y,T.WATER); else if(e<=1.25&&get(x,y)!==T.WATER)set(x,y,T.SAND);
+ }
+ // 北の古代遺跡
+ for(let y=6;y<=20;y++)for(let x=44;x<=64;x++){
+  set(x,y,T.RUIN);
+  if(x%5===1&&y%4===1&&rnd()<0.7&&!(x>50&&x<58))set(x,y,T.PILLAR);
+ }
+ // 道を敷く（道の周囲1マスの木は取り除く）
+ function path(x1,y1,x2,y2){
+  let x=x1,y=y1;
+  const stepFn=()=>{
+   set(x,y,T.PATH);
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+    if(get(x+dx,y+dy)===T.TREE)set(x+dx,y+dy,T.GRASS);
+  };
+  stepFn();
+  while(x!==x2){x+=Math.sign(x2-x);stepFn()}
+  while(y!==y2){y+=Math.sign(y2-y);stepFn()}
+ }
+ path(50,62,50,22);                    // 村→北（遺跡）
+ path(50,22,54,22); path(54,22,54,10); // 遺跡→魔王城の門
+ path(50,40,16,40); path(16,40,16,23); // 西：まよいの森→神殿
+ path(50,50,62,50);                    // 東：みずうみへ
+ path(56,62,86,62); path(86,62,86,66); // 南東：ようがんの洞窟へ
+ path(16,15,16,9);                     // 北西：こおりの神殿へ
+ // たびだちの村（広場）
+ for(let y=60;y<=64;y++)for(let x=46;x<=56;x++)set(x,y,T.PATH);
+ // 森の神殿（西）：前庭とファサード
+ for(let y=15;y<=22;y++)for(let x=12;x<=20;x++)set(x,y,T.GRASS);
+ for(let x=13;x<=19;x++)set(x,17,T.CWALL);
+ set(15,17,T.TORCH); set(17,17,T.TORCH); set(16,17,T.ENT);
+ // みずうみの祠（島）：目玉スイッチ付き
+ for(let y=48;y<=52;y++)for(let x=74;x<=78;x++)set(x,y,T.GRASS);
+ for(let x=74;x<=78;x++)set(x,48,T.CWALL);
+ set(74,49,T.EYE); set(75,49,T.CWALL); set(76,49,T.DOOR_C); set(77,49,T.CWALL); set(78,49,T.CWALL);
+ for(let y=50;y<=52;y++)for(let x=74;x<=78;x++)set(x,y,T.SAND);
+ // 島への橋
+ set(62,50,T.PATH);
+ for(let x=63;x<=73;x++)set(x,50,T.BRIDGE);
+ // 魔王城の門（遺跡の北）＋結界
+ for(let x=50;x<=58;x++){set(x,7,T.CWALL);set(x,8,T.CWALL)}
+ set(54,8,T.ENT); set(53,8,T.TORCH); set(55,8,T.TORCH);
+ set(54,9,T.BARRIER);
+ // こおりの神殿（北西の高地）
+ for(let y=5;y<=10;y++)for(let x=12;x<=22;x++)set(x,y,T.GRASS);
+ for(let x=13;x<=21;x++)set(x,7,T.CWALL);
+ set(17,7,T.ENT); set(16,7,T.TORCH); set(18,7,T.TORCH);
+ set(13,9,T.ICE); set(21,10,T.ICE); set(14,5,T.ICE);
+ // ようがんの洞窟（南東の丘）
+ for(let y=64;y<=70;y++)for(let x=82;x<=90;x++)set(x,y,T.RUIN);
+ for(let x=83;x<=89;x++)set(x,64,T.MTN);
+ for(let x=83;x<=89;x++)set(x,65,T.CWALL);
+ set(86,65,T.ENT); set(85,65,T.TORCH); set(87,65,T.TORCH);
+ set(84,68,T.LAVA); set(88,69,T.LAVA); set(83,67,T.LAVA);
+ // 外周の山脈
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  if(x<2||y<2||x>=w-2||y>=h-2)set(x,y,T.MTN);
+  else if((x<4||y<4||x>=w-4||y>=h-4)&&rnd()<0.45)set(x,y,T.MTN);
+ }
+ const m={id:'overworld',w,h,t,chests:{},spawns:[],switches:[],warps:{},signs:{},npcs:[]};
+ // ワープ（祠の扉は目玉を射抜いた後に動的追加）
+ m.warps['16,17']={map:'d1',x:15,y:21};
+ m.warps['54,8']={map:'castle',x:15,y:25};
+ m.warps['86,65']={map:'d3',x:15,y:21};
+ m.warps['17,7']={map:'d4',x:15,y:21};
+ m.warps['58,16']={map:'abyss',x:15,y:18};
+ // 看板
+ m.signs['52,62']='《たびだちの村》\n北：古代いせきと 魔王城\n西：まよいの森　東：みずうみ';
+ m.signs['44,39']='この先 まよいの森\nおくの「森の神殿」に もりの紋章あり';
+ m.signs['51,24']='この先 古代いせき\n魔王城は けっかいに まもられている';
+ m.signs['60,49']='この先 みずうみの祠\n〜 みずの紋章 ここに ねむる 〜';
+ m.signs['84,63']='この先 ようがんの洞窟\n〜 ほのおの紋章 ここに ねむる 〜';
+ m.signs['17,13']='この先 こおりの神殿\n〜 まもりの ちからが ねむる 〜';
+ m.signs['56,17']='《 深淵の いりぐち 》\n魔王すら あやつっていた ものが\nこの おくで めざめている……';
+ for(const k in m.signs){
+  const p=k.split(','); set(+p[0],+p[1],T.SIGN);
+ }
+ // 村のNPC
+ m.npcs=[
+  {kind:'oldman',   x:48, y:61, talk:talkOldman},
+  {kind:'merchant', x:46, y:63, talk:talkShield},
+  {kind:'merchant2',x:54, y:64, talk:talkPotion},
+ ];
+ // 敵の出現ゾーン
+ m.spawnZones=[
+  {x1:30,y1:46,x2:70,y2:72,types:['slime','beetle'],n:7},
+  {x1:8, y1:12,x2:34,y2:44,types:['bat','slime','ghost','wolf'],n:8},
+  {x1:45,y1:10,x2:63,y2:20,types:['skel','mage','archer'],n:5},
+  {x1:70,y1:60,x2:95,y2:76,types:['wolf','beetle'],n:4},
+ ];
+ return m;
+}
+
+// ---------- 全マップ構築 ----------
+const MAPS={};
+function buildMaps(){
+ MAPS.overworld=buildOverworld();
+ MAPS.d1=parseDungeon('d1',D1_ROWS,30);
+ MAPS.d1.warps['15,23']={map:'overworld',x:16,y:18};
+ MAPS.d1.sealZones=[{x1:5,y1:5,x2:24,y2:11,doors:[[14,12],[7,4],[22,4]],guard:'mid'}];
+ MAPS.d2=parseDungeon('d2',D2_ROWS,30);
+ MAPS.d2.warps['15,23']={map:'overworld',x:76,y:50};
+ MAPS.d2.sealZones=[{x1:5,y1:5,x2:24,y2:11,doors:[[14,12],[7,4],[22,4]],guard:'mid'}];
+ MAPS.d3=parseDungeon('d3',D3_ROWS,30);
+ MAPS.d3.warps['15,23']={map:'overworld',x:86,y:66};
+ MAPS.d3.sealZones=[{x1:5,y1:5,x2:24,y2:11,doors:[[14,12],[7,4],[22,4]],guard:'mid'}];
+ MAPS.d4=parseDungeon('d4',D4_ROWS,30);
+ MAPS.d4.warps['15,23']={map:'overworld',x:17,y:8};
+ MAPS.d4.sealZones=[{x1:5,y1:5,x2:24,y2:11,doors:[[14,12],[7,4],[22,4]],guard:'mid'}];
+ MAPS.abyss=parseDungeon('abyss',ABYSS_ROWS,30);
+ MAPS.abyss.warps['15,19']={map:'overworld',x:58,y:17};
+ MAPS.abyss.sealZones=[{x1:3,y1:1,x2:26,y2:9,doors:[[14,10]],guard:'dark'}];
+ MAPS.castle=parseDungeon('castle',CASTLE_ROWS,30);
+ MAPS.castle.warps['15,27']={map:'overworld',x:54,y:10};
+ MAPS.castle.sealZones=[
+  {x1:3,y1:1,x2:26,y2:9,doors:[[14,10]],guard:'boss'},
+  {x1:9,y1:11,x2:20,y2:16,doors:[[14,17]],guard:'mid'},
+ ];
+}
+
+// ---------- ミニマップ（マップ切替時に生成） ----------
+function buildMinimap(){
+ const m=cur, c=document.createElement('canvas');
+ const sc=m.id==='overworld'?0.5:1;
+ c.width=Math.ceil(m.w*sc); c.height=Math.ceil(m.h*sc);
+ const g=c.getContext('2d');
+ const col={};
+ col[T.GRASS]=col[T.GRASS2]=col[T.FLOWER]='#3a8f3a';
+ col[T.TREE]='#1e5c26'; col[T.WATER]='#2a62c8'; col[T.SAND]='#d8c078';
+ col[T.PATH]='#c8a860'; col[T.MTN]='#6b6258'; col[T.BRIDGE]='#a2703c';
+ col[T.WALL]=col[T.CWALL]='#3a4150';
+ col[T.FLOOR]=col[T.FLOOR2]=col[T.SW_OFF]=col[T.SW_ON]=col[T.STAIR_U]='#b7a184';
+ col[T.RUIN]='#8a8a92'; col[T.PILLAR]='#6a6a74'; col[T.ENT]='#101018';
+ col[T.SEAL]='#8a2ae0'; col[T.SPIKE]='#a89478'; col[T.DOOR_F]='#b06038'; col[T.LAVA]='#d84018'; col[T.ICE]='#a8d8ec'; col[T.ICEBLK]='#7ec4e0';
+ col[T.BRAZIER]=col[T.BRAZIER_ON]=col[T.CRYS_OFF]=col[T.CRYS_ON]='#b7a184';
+ for(let y=0;y<m.h;y++)for(let x=0;x<m.w;x++){
+  const id=curT[y*m.w+x];
+  g.fillStyle=col[id]||'#caa640';
+  g.fillRect(Math.floor(x*sc),Math.floor(y*sc),1,1);
+ }
+ minimap=c;
+}
+
+// ---------- ゲーム状態 ----------
+let state='title'; // title / play / dialog / menu / over / ending
+let S=null;        // セーブ対象のプレイデータ
+function newS(){return{
+ maxHp:6,hp:6,coins:0,keys:0,potions:0,
+ sword:false,sword2:false,shield:false,tunic:false,bow:false,boomerang:false,bossKey:false,crests:0,
+ sel:0,                       // 選択中アイテム（0弓 1ブーメラン 2くすり）
+ opened:{},solved:{},flags:{},// 開けた宝箱・解いたしかけ・進行フラグ
+}}
+let curId='overworld', cur=null, curT=null, minimap=null;
+const player={x:0,y:0,dir:'d',anim:0,atk:0,inv:0,push:0,pushKey:''};
+let enemies=[], shots=[], pickups=[], fxs=[], npcs=[];
+const cam={x:0,y:0};
+let shake=0, perf=0, waterF=0, msgCd=0, justWarped=false;
+let fade={t:0,dir:0,cb:null};
+let prevState='play', endT=0, selCd=0;
+const MID_TYPES=new Set(['gslime','gbat','dknight','golem','dragon']); // 中ボスの種類
+const MID_OF={d1:'gslime',d2:'gbat',d3:'golem',d4:'dragon',castle:'dknight'}; // マップごとの中ボス
+let sealRt=[], spikeF=0; // 封印ゾーンの状態・トゲ床の周期
+
+// ---------- タイル参照・当たり判定 ----------
+function tileAt(tx,ty){
+ if(tx<0||ty<0||tx>=cur.w||ty>=cur.h)return T.MTN;
+ return curT[ty*cur.w+tx];
+}
+function setTile(tx,ty,v){
+ if(tx<0||ty<0||tx>=cur.w||ty>=cur.h)return;
+ curT[ty*cur.w+tx]=v;
+}
+function npcAt(tx,ty){return npcs.find(n=>n.x===tx&&n.y===ty)}
+function isSolid(tx,ty){return SOLID.has(tileAt(tx,ty))||!!npcAt(tx,ty)}
+function solidAtPx(x,y){return SOLID.has(tileAt(Math.floor(x/TS),Math.floor(y/TS)))}
+// 矩形と地形の衝突（hitsに触れたタイルを記録）
+function collideRect(x,y,w,h,hits){
+ const x1=Math.floor(x/TS), y1=Math.floor(y/TS);
+ const x2=Math.floor((x+w-1)/TS), y2=Math.floor((y+h-1)/TS);
+ let hitFlag=false;
+ for(let ty=y1;ty<=y2;ty++)for(let tx=x1;tx<=x2;tx++){
+  if(isSolid(tx,ty)){hitFlag=true;if(hits)hits.push([tx,ty,tileAt(tx,ty)])}
+ }
+ return hitFlag;
+}
+// 軸ごとに移動（壁ずり）
+function moveEntity(e,dx,dy,bw,bh,ox,oy,hits){
+ if(dx&&!collideRect(e.x+dx+ox,e.y+oy,bw,bh,hits))e.x+=dx;
+ if(dy&&!collideRect(e.x+ox,e.y+dy+oy,bw,bh,hits))e.y+=dy;
+}
+
+// ---------- 会話システム ----------
+let dlg=null;
+function say(text,cb){
+ const pages=Array.isArray(text)?text:[text];
+ dlg={pages,pi:0,ci:0,choices:null,sel:0,cb};
+ state='dialog';
+}
+function ask(text,choices,cb){
+ const pages=Array.isArray(text)?text:[text];
+ dlg={pages,pi:0,ci:0,choices,sel:0,choiceCb:cb};
+ state='dialog';
+}
+function dialogA(){ // Aボタン／画面タップで会話を進める
+ if(!dlg)return;
+ const page=dlg.pages[dlg.pi];
+ if(dlg.ci<page.length){dlg.ci=page.length;return}   // タイプ中→全表示
+ if(dlg.pi<dlg.pages.length-1){dlg.pi++;dlg.ci=0;sfx.blip();return}
+ if(dlg.choices){                                     // 選択肢を確定
+  const cb=dlg.choiceCb, sel=dlg.sel;
+  dlg=null; state='play'; sfx.cursor();
+  if(cb)cb(sel); return;
+ }
+ const cb=dlg.cb;
+ dlg=null; state='play';
+ if(cb)cb();
+}
+function updateDialog(){
+ if(selCd>0)selCd--;
+ if(dlg&&dlg.choices&&selCd===0){
+  if(inp.dy>0.5){dlg.sel=Math.min(dlg.choices.length-1,dlg.sel+1);selCd=12;sfx.cursor()}
+  if(inp.dy<-0.5){dlg.sel=Math.max(0,dlg.sel-1);selCd=12;sfx.cursor()}
+ }
+ if(inp.aP)dialogA();
+}
+
+// ---------- NPC会話 ----------
+function talkOldman(){
+ if(!S.sword){
+  say(['おお、勇者どのか。まおうバルガンの ふっかつで\nせかいは やみに つつまれようと しておる…',
+       'まるごしでは あぶない。\nわしの たからを さずけよう。',
+       '【 ゆうしゃの剣 を てにいれた！】\nAボタンで 剣を ふるえるぞ！'],
+   ()=>{S.sword=true;sfx.fanfare();updateItemBar()});
+ }else if(S.flags.trueEnd){
+  say('闇の王すら たおすとは……\nそなたこそ しんの勇者じゃ。\nせかいは ほんとうの ひかりを とりもどした！');
+ }else if(S.flags.beat){
+  say(['まおうバルガンを たおしたか！\nだが…… 遺跡の 大地が まだ ざわめいておる。',
+       'こだいの 書に あった。\n「魔王を あやつりし 影の王、\n　ふかき 深淵に ねむる」と……',
+       '北の 古代いせきに あたらしい あなが\nひらいたそうじゃ。ゆく気なら――\nじゅうぶん つよくなってから にせよ。']);
+ }else if(S.crests>=4){
+  say('四つの紋章が そろったな！\n北の魔王城の けっかいを やぶるのじゃ！');
+ }else{
+  say(['光の紋章は 四つに くだけ、\nこの地の 四つの せいいきに ちった。',
+       '西の「森の神殿」に もりの紋章、\nひがしの「みずうみの祠」に みずの紋章。',
+       '南東の「ようがんの洞窟」に ほのおの紋章、\n北西の「こおりの神殿」に こおりの紋章。',
+       '四つ すべて そろえば 魔王城の けっかいを\nやぶれるじゃろう。（いま '+S.crests+' / 4）']);
+ }
+}
+function talkShield(){
+ if(S.shield){say('その盾、にあっておるぞ！\nまものの 弾を 正面で ふせいでくれる。');return}
+ ask('いらっしゃい！ まもりの盾は 80コインだよ。\nかっていくかい？',
+  ['かう（80コイン）','やめておく'],i=>{
+  if(i!==0)return;
+  if(S.coins>=80){
+   S.coins-=80; S.shield=true; sfx.chest();
+   say('【 まもりの盾 を てにいれた！】\nまものの 弾を 正面で ふせげるぞ！');
+  }else{sfx.deny();say('おっと、コインが たりないようだね。')}
+ });
+}
+function talkPotion(){
+ ask('やあ！ きずぐすりは 30コイン。\n体力が ぜんかいふくするよ。かうかい？',
+  ['かう（30コイン）','やめておく'],i=>{
+  if(i!==0)return;
+  if(S.potions>=3){sfx.deny();say('おっと、くすりは 3つまでしか もてないよ。')}
+  else if(S.coins>=30){
+   S.coins-=30; S.potions++; sfx.coin(); updateItemBar();
+   say('まいどあり！ アイコンで えらんで\nBボタンで つかえるよ。');
+  }else{sfx.deny();say('コインが たりないみたいだ。')}
+ });
+}
+
+// ---------- マップ読み込み ----------
+function loadMap(id,px,py){
+ curId=id; cur=MAPS[id];
+ curT=new Uint8Array(cur.t); // 原本を汚さないようコピー
+ // 開けた宝箱・扉を復元
+ for(const k in S.opened){
+  if(!k.startsWith(id+':'))continue;
+  const p=k.slice(id.length+1).split(',');
+  const x=+p[0], y=+p[1], t0=tileAt(x,y);
+  if(t0===T.CHEST)setTile(x,y,T.CHEST_O);
+  else if(t0===T.DOOR_L||t0===T.DOOR_B)setTile(x,y,T.FLOOR);
+ }
+ // しかけ解決済み→しかけ扉を開放
+ if(S.solved[id]){
+  for(let i=0;i<curT.length;i++)if(curT[i]===T.DOOR_C)curT[i]=T.FLOOR;
+  for(const k of cur.switches){const p=k.split(',');setTile(+p[0],+p[1],T.SW_ON)}
+ }
+ // かがり火のしかけ解決済み
+ if(S.solved[id+':fire']){
+  for(let i=0;i<curT.length;i++){
+   if(curT[i]===T.BRAZIER)curT[i]=T.BRAZIER_ON;
+   if(curT[i]===T.DOOR_F)curT[i]=T.FLOOR;
+  }
+ }
+ // クリスタルのしかけ解決済み
+ if(S.solved[id+':crys']){
+  for(let i=0;i<curT.length;i++){
+   if(curT[i]===T.CRYS_OFF)curT[i]=T.CRYS_ON;
+   if(curT[i]===T.DOOR_F)curT[i]=T.FLOOR;
+  }
+ }
+ // オーバーワールドの進行フラグ反映
+ if(id==='overworld'){
+  if(S.flags.eyeOpen){setTile(74,49,T.EYE_ON);setTile(76,49,T.ENT)}
+  if(S.flags.barrierOff)setTile(54,9,T.RUIN);
+  if(S.flags.beat&&!S.flags.trueEnd){ // 魔王撃破後、遺跡に深淵の入口があらわれる
+   setTile(58,16,T.ENT); setTile(57,16,T.TORCH); setTile(59,16,T.TORCH);
+   setTile(56,17,T.SIGN);
+  }
+ }
+ // 敵の配置
+ enemies=[]; shots=[]; pickups=[]; fxs=[];
+ if(cur.spawnZones){
+  for(const z of cur.spawnZones)for(let i=0;i<z.n;i++){
+   const rx=z.x1+Math.floor(Math.random()*(z.x2-z.x1));
+   const ry=z.y1+Math.floor(Math.random()*(z.y2-z.y1));
+   if(!SOLID.has(tileAt(rx,ry))&&Math.hypot(rx-px,ry-py)>7)
+    spawnEnemy(z.types[Math.floor(Math.random()*z.types.length)],rx,ry);
+  }
+ }
+ for(const sp of cur.spawns){
+  if(sp.t==='boss'&&S.flags.beat)continue; // 撃破後は復活しない
+  let tt=sp.t;
+  if(tt==='mid'){
+   if(S.flags['mid_'+id])continue; // 中ボスは一度倒せば復活しない
+   tt=MID_OF[id]||'gslime';
+  }
+  spawnEnemy(tt,sp.x,sp.y);
+ }
+ npcs=cur.npcs.slice();
+ // 封印ゾーンの初期化とボスの行動範囲の紐づけ
+ sealRt=(cur.sealZones||[]).map(z=>Object.assign({sealed:false},z));
+ for(const e of enemies){
+  if(e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t)){
+   const ztx=Math.floor(e.x/TS), zty=Math.floor(e.y/TS);
+   e.zone=sealRt.find(z=>ztx>=z.x1&&ztx<=z.x2&&zty>=z.y1&&zty<=z.y2)||null;
+  }
+ }
+ player.x=px*TS; player.y=py*TS; player.atk=0; player.inv=0;
+ justWarped=true; msgCd=0;
+ cam.x=clamp(player.x+8-W/2,0,cur.w*TS-W);
+ cam.y=clamp(player.y+8-H/2,0,cur.h*TS-H);
+ buildMinimap();
+ playMusic(id==='overworld'?'over':id==='abyss'?'boss':'dun');
+ updateItemBar();
+}
+function spawnEnemy(t,tx,ty){
+ const base={
+  slime:{hp:2,spd:0.35,dmg:1}, bat:{hp:1,spd:0.7,dmg:1},
+  skel:{hp:3,spd:0.55,dmg:2},  mage:{hp:2,spd:0.4,dmg:1},
+  ghost:{hp:2,spd:0.45,dmg:1}, knight:{hp:5,spd:0.3,dmg:2},
+  beetle:{hp:2,spd:1.1,dmg:1}, wolf:{hp:3,spd:0.7,dmg:1},
+  archer:{hp:2,spd:0.4,dmg:1}, flame:{hp:2,spd:0.05,dmg:2},
+  iceslime:{hp:3,spd:0.5,dmg:1}, imp:{hp:2,spd:0.6,dmg:1},
+  turret:{hp:4,spd:0,dmg:1},
+  gslime:{hp:12,spd:0.4,dmg:1}, gbat:{hp:12,spd:0.9,dmg:1},
+  dknight:{hp:16,spd:0.35,dmg:2}, golem:{hp:18,spd:0.3,dmg:2},
+  dragon:{hp:20,spd:0.5,dmg:2},
+  shadow:{hp:3,spd:0.9,dmg:1},
+  dark:{hp:60,spd:0.9,dmg:3},
+  boss:{hp:40,spd:0.8,dmg:2},
+ }[t];
+ enemies.push({t,x:tx*TS,y:ty*TS,hp:base.hp,maxHp:base.hp,spd:base.spd,dmg:base.dmg,
+  dir:Math.random()*Math.PI*2,tmr:Math.floor(Math.random()*90),
+  stun:0,hurt:0,phase:1,st:'idle',ctm:0,
+  w:(t==='boss'||t==='dark'||MID_TYPES.has(t))?28:12,
+  h:(t==='boss'||t==='dark'||MID_TYPES.has(t))?28:12});
+}
+
+// ---------- ワープ＆フェード ----------
+function warpTo(id,x,y){
+ sfx.stairs();
+ startFade(()=>{loadMap(id,x,y);saveGame(false)});
+}
+function startFade(cb){fade={t:0,dir:1,cb}}
+function updateFade(){
+ if(!fade.dir)return;
+ fade.t+=fade.dir*0.08;
+ if(fade.dir>0&&fade.t>=1){fade.t=1;const cb=fade.cb;fade.cb=null;if(cb)cb();fade.dir=-1}
+ if(fade.dir<0&&fade.t<=0){fade.t=0;fade.dir=0}
+}
+
+// ---------- セーブ／ロード ----------
+function saveGame(manual){
+ store.set(SAVE_KEY,JSON.stringify({S,map:curId,x:player.x,y:player.y,muted}));
+ if(manual)sfx.save();
+}
+function loadGame(){
+ const raw=store.get(SAVE_KEY); if(!raw)return false;
+ try{
+  const d=JSON.parse(raw);
+  S=Object.assign(newS(),d.S);
+  if(d.muted&&!muted)toggleMute();
+  loadMap(d.map,Math.round(d.x/TS),Math.round(d.y/TS));
+  player.x=d.x; player.y=d.y;
+  return true;
+ }catch(e){return false}
+}
+
+// ---------- Aボタン：しらべる・はなす・剣 ----------
+const DIRV={d:[0,1],u:[0,-1],l:[-1,0],r:[1,0]};
+function doAction(){
+ const ptx=Math.floor((player.x+8)/TS), pty=Math.floor((player.y+10)/TS);
+ const tx=ptx+DIRV[player.dir][0], ty=pty+DIRV[player.dir][1];
+ const n=npcAt(tx,ty);
+ if(n){n.talk();return}
+ const t=tileAt(tx,ty);
+ if(t===T.SIGN){sfx.blip();say(cur.signs[tx+','+ty]||'……なにも かいていない。');return}
+ if(t===T.CHEST){openChest(tx,ty);return}
+ if(S.sword){if(player.atk<=0){player.atk=14;sfx.sword()}}
+ else say('（まだ ぶきを もっていない。\n村の 老人に はなしかけてみよう）');
+}
+
+// ---------- 宝箱・アイテム入手 ----------
+function openChest(tx,ty){
+ const key=curId+':'+tx+','+ty;
+ if(S.opened[key])return;
+ const item=cur.chests[tx+','+ty]; if(!item)return;
+ S.opened[key]=1; setTile(tx,ty,T.CHEST_O); sfx.chest();
+ giveItem(item);
+}
+function giveItem(item){
+ switch(item){
+  case 'bow':
+   S.bow=true; S.sel=0;
+   say('【 いにしえの弓 を てにいれた！】\nBボタンで 矢を はなてる！\n（がめん下の アイコンで もちかえ）');break;
+  case 'boomerang':
+   S.boomerang=true; S.sel=1;
+   say('【 ブーメラン を てにいれた！】\n敵の うごきを とめ、おちている\nものも ひろってきてくれるぞ！');break;
+  case 'heart':
+   S.maxHp=Math.min(12,S.maxHp+2); S.hp=S.maxHp; sfx.heart();
+   say('【 いのちのうつわ を てにいれた！】\n体力の さいだいちが ふえた！');break;
+  case 'key':
+   S.keys++; sfx.key();
+   say('【 小さなカギ を てにいれた！】');break;
+  case 'coins':
+   S.coins=Math.min(999,S.coins+20); sfx.coin();
+   say('20コイン はいっていた！');break;
+  case 'crest':
+   S.crests++; sfx.fanfare();
+   say('【 光の紋章のかけら を てにいれた！】（'+S.crests+' / 4）'+
+    (S.crests>=4?'\n四つ すべて そろった！\n北の魔王城の けっかいを やぶれる！'
+     :'\nのこり '+(4-S.crests)+'つ…'));break;
+  case 'sword2':
+   S.sword2=true; sfx.fanfare();
+   say('【 マスターソード を てにいれた！】\n剣の いりょくが 大きく あがった！\n（こうげき力 2 → 3）');break;
+  case 'potion':
+   S.potions=Math.min(3,S.potions+1); sfx.heart();
+   say('【 きずぐすり を てにいれた！】\nBボタンで つかえば ぜんかいふく！');break;
+  case 'tunic':
+   S.tunic=true; sfx.fanfare();
+   say('【 まもりの服 を てにいれた！】\nうけるダメージが はんぶんになった！');break;
+  case 'bossKey':
+   S.bossKey=true; sfx.fanfare();
+   say('【 魔王の間のカギ を てにいれた！】\nむらさきの とびらが ひらけるぞ！');break;
+ }
+ updateItemBar();
+}
+
+// ---------- 壁ドン系ギミック（扉・結界・ブロック押し） ----------
+function touchTile(tx,ty,t){
+ const key=curId+':'+tx+','+ty;
+ if(t===T.BLOCK){ // 押しブロック（押し続けると動く）
+  const k=tx+','+ty;
+  if(player.pushKey===k)player.push++; else{player.pushKey=k;player.push=0}
+  if(player.push>12){player.push=-10;tryPushBlock(tx,ty)}
+  return;
+ }
+ if(msgCd>0)return;
+ if(t===T.DOOR_L){
+  if(S.keys>0){S.keys--;S.opened[key]=1;setTile(tx,ty,T.FLOOR);sfx.unlock()}
+  else{msgCd=45;sfx.deny();say('カギが かかっている！\n（小さなカギが ひつようだ）')}
+ }else if(t===T.DOOR_B){
+  if(S.bossKey){S.opened[key]=1;setTile(tx,ty,T.FLOOR);sfx.unlock()}
+  else{msgCd=45;sfx.deny();say('がんじょうな とびらだ。\n「魔王の間のカギ」が ひつようだ！')}
+ }else if(t===T.DOOR_C){
+  msgCd=60;
+  say(curId==='overworld'
+   ?'とびらは かたく とざされている。\nかべの「赤い目」が こちらを みている…'
+   :'とびらは とざされている。\nどこかに しかけが あるはずだ。');
+ }else if(t===T.BARRIER){
+  msgCd=60;
+  if(S.crests>=4){
+   S.flags.barrierOff=1; setTile(tx,ty,T.RUIN); sfx.fanfare(); shake=14;
+   say('四つの紋章が ひかりかがやき、\nけっかいが きえさった！！');
+  }else{
+   sfx.deny();
+   say('むらさきの けっかいが ゆくてを はばむ！\n（光の紋章 '+S.crests+' / 4）');
+  }
+ }else if(t===T.EYE){
+  msgCd=60;
+  say('せきぞうの「赤い目」が にらんでいる…\nなにかで うちぬけないだろうか？');
+ }
+}
+function tryPushBlock(tx,ty){
+ const d=DIRV[player.dir], nx=tx+d[0], ny=ty+d[1];
+ const nt=tileAt(nx,ny);
+ if(nt===T.FLOOR||nt===T.FLOOR2||nt===T.SW_OFF){
+  setTile(tx,ty,T.FLOOR); setTile(nx,ny,T.BLOCK); sfx.sw();
+  // すべてのスイッチがブロックでふさがれたら解決（複数スイッチ対応）
+  if(!S.solved[curId]&&cur.switches.length>0
+     &&cur.switches.every(k=>{const p=k.split(',');return tileAt(+p[0],+p[1])===T.BLOCK})){
+   S.solved[curId]=1; sfx.unlock(); shake=8;
+   for(let i=0;i<curT.length;i++)if(curT[i]===T.DOOR_C)curT[i]=T.FLOOR;
+   say('ズズズ…… どこかで とびらが ひらいた！');
+  }else if(!S.solved[curId]&&cur.switches.indexOf(nx+','+ny)>=0){
+   sfx.sw(); // まだ残りのスイッチがある：手ごたえだけ
+  }
+ }
+}
+
+// ---------- Bボタン：アイテム使用 ----------
+function useItem(){
+ const sel=S.sel;
+ if(sel===0&&S.bow){
+  if(shots.filter(s=>s.kind==='arrow'&&s.from==='p').length>=2)return;
+  const d=DIRV[player.dir];
+  shots.push({kind:'arrow',from:'p',x:player.x+4,y:player.y+4,
+   vx:d[0]*3.2,vy:d[1]*3.2,life:70});
+  sfx.arrow();
+ }else if(sel===1&&S.boomerang){
+  if(shots.some(s=>s.kind==='boom'))return;
+  const d=DIRV[player.dir];
+  shots.push({kind:'boom',from:'p',x:player.x+4,y:player.y+4,
+   vx:d[0]*2.6,vy:d[1]*2.6,st:0,tOut:0,rot:0});
+  sfx.boomTick();
+ }else if(sel===2){
+  if(S.potions>0&&S.hp<S.maxHp){
+   S.potions--; S.hp=S.maxHp; sfx.heart();
+   fxs.push({kind:'healring',x:player.x,y:player.y,t:0});
+   updateItemBar();
+  }else sfx.deny();
+ }else sfx.deny();
+}
+
+// ---------- 弾（矢・ブーメラン・魔法弾） ----------
+function updateShots(){
+ for(let i=shots.length-1;i>=0;i--){
+  const s=shots[i];
+  if(s.kind==='boom'){ // ブーメラン：往路→復路で手元へ
+   s.rot+=0.35;
+   if(s.st===0){
+    s.tOut++; s.x+=s.vx; s.y+=s.vy;
+    const btx=Math.floor((s.x+4)/TS), bty=Math.floor((s.y+4)/TS);
+    const btt=tileAt(btx,bty);
+    if(btt===T.BRAZIER||btt===T.CRYS_OFF){hitGimmick(btx,bty);s.st=1}
+    else if(s.tOut>26||(SOLID.has(btt)&&btt!==T.WATER&&btt!==T.LAVA))s.st=1; // 水・溶岩の上は通過
+   }else{
+    const dx=player.x+4-s.x, dy=player.y+4-s.y, l=Math.hypot(dx,dy);
+    if(l<8){shots.splice(i,1);continue}
+    s.x+=dx/l*3; s.y+=dy/l*3;
+   }
+   if(perf%7===0)sfx.boomTick();
+   hitEnemiesWith(s,1,true); // スタン効果
+   for(let j=pickups.length-1;j>=0;j--){ // アイテム回収
+    const p=pickups[j];
+    if(Math.hypot(p.x-s.x,p.y-s.y)<10){collectPickup(p);pickups.splice(j,1)}
+   }
+   continue;
+  }
+  s.x+=s.vx; s.y+=s.vy; s.life--;
+  if(s.life<=0){shots.splice(i,1);continue}
+  const tx=Math.floor((s.x+4)/TS), ty=Math.floor((s.y+4)/TS);
+  const tt=tileAt(tx,ty);
+  if(s.kind==='arrow'&&tt===T.EYE){ // 目玉スイッチを射抜いた！
+   setTile(tx,ty,T.EYE_ON); S.flags.eyeOpen=1; setTile(76,49,T.ENT);
+   sfx.unlock(); shake=8; shots.splice(i,1);
+   say('カッ！ せきぞうの目が とじ、\n祠の とびらが ひらいた！');
+   continue;
+  }
+  if(SOLID.has(tt)&&tt!==T.WATER&&tt!==T.LAVA){ // 弾は水・溶岩の上を通過できる
+   if(s.kind==='arrow'&&hitGimmick(tx,ty)){shots.splice(i,1);continue}
+   if(tt===T.ICEBLK){ // こおりブロックは矢でくだける
+    setTile(tx,ty,T.FLOOR); sfx.clink(); shake=3;
+    fxs.push({kind:'spark',x:tx*TS+4,y:ty*TS+4,t:0});
+    shots.splice(i,1); continue;
+   }
+   shots.splice(i,1);
+   fxs.push({kind:'spark',x:s.x,y:s.y,t:0});
+   continue;
+  }
+  if(s.from==='p'){
+   if(hitEnemiesWith(s,2,false))shots.splice(i,1);
+  }else{ // 敵の弾→プレイヤー（盾で正面防御可）
+   if(rectHit({x:s.x,y:s.y,w:8,h:8},{x:player.x+3,y:player.y+5,w:10,h:10})){
+    const d=DIRV[player.dir];
+    if(S.shield&&player.atk<=0&&(d[0]*s.vx+d[1]*s.vy)<-0.5){
+     sfx.clink(); fxs.push({kind:'spark',x:s.x,y:s.y,t:0});
+    }else hurtPlayer(s.dmg||1,s.x,s.y);
+    shots.splice(i,1);
+   }
+  }
+ }
+}
+function hitEnemiesWith(s,dmg,stunOnly){
+ for(const e of enemies){
+  if((e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t))&&e.zone&&!e.zone.sealed)continue; // 待機中は無敵
+  const box={x:e.x+2,y:e.y+2,w:e.w,h:e.h};
+  if(!rectHit({x:s.x,y:s.y,w:8,h:8},box))continue;
+  if(stunOnly){
+   if(e.stun<=0){
+    if(e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t)){e.stun=45;damageEnemy(e,1,s.x,s.y)}
+    else{e.stun=110;sfx.hit()}
+   }
+  }else damageEnemy(e,dmg,s.x,s.y);
+  return true;
+ }
+ return false;
+}
+
+// ---------- ダメージ処理 ----------
+function damageEnemy(e,dmg,kx,ky){
+ if(e.hurt>0)return;
+ if((e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t))&&e.zone&&!e.zone.sealed)return; // 待機中は無敵
+ e.hp-=dmg; e.hurt=12; sfx.hit();
+ if(kx!==undefined&&e.t!=='boss'&&e.t!=='dark'&&!MID_TYPES.has(e.t)){
+  const l=Math.hypot(e.x-kx,e.y-ky)||1;
+  moveEntity(e,(e.x-kx)/l*6,0,12,10,2,3);
+  moveEntity(e,0,(e.y-ky)/l*6,12,10,2,3);
+ }
+ if(e.hp<=0)killEnemy(e);
+}
+function killEnemy(e){
+ const i=enemies.indexOf(e); if(i<0)return;
+ if(e.t==='boss'){bossDeath(e);return}
+ if(e.t==='dark'){darkDeath(e);return}
+ if(MID_TYPES.has(e.t)){midDeath(e,i);return}
+ enemies.splice(i,1);
+ fxs.push({kind:'poof',x:e.x,y:e.y,t:0});
+ const r=Math.random();
+ if(r<0.28)pickups.push({kind:'heart',x:e.x+4,y:e.y+4,life:420});
+ else if(r<0.62)pickups.push({kind:'coin',x:e.x+4,y:e.y+4,life:420});
+}
+// ---------- 中ボス撃破 ----------
+function midDeath(e,i){
+ enemies.splice(i,1);
+ if(e.t==='gslime'){ // キングスライムは倒すと分裂する！
+  for(let k=-1;k<=1;k++){
+   const sx=Math.floor(e.x/TS)+k, sy=Math.floor(e.y/TS);
+   if(!SOLID.has(tileAt(sx,sy)))spawnEnemy('slime',sx,sy);
+  }
+ }
+ S.flags['mid_'+curId]=1;
+ for(const z of sealRt)if(z.guard==='mid'&&z.sealed)unsealZone(z);
+ for(let k=0;k<6;k++)
+  fxs.push({kind:'expl',x:e.x+Math.random()*28,y:e.y+Math.random()*28,t:-k*4});
+ sfx.expl(); sfx.fanfare();
+ pickups.push({kind:'heart',x:e.x+6,y:e.y+8,life:900});
+ pickups.push({kind:'heart',x:e.x+16,y:e.y+14,life:900});
+ playMusic('dun');
+ saveGame(false);
+}
+// 封印を解く
+function unsealZone(z){
+ for(const d of z.doors)setTile(d[0],d[1],T.FLOOR);
+ z.sealed=false; sfx.unlock();
+}
+// ボス・中ボス部屋に入ったら扉を封印して戻れなくする
+function updateSeals(){
+ for(const z of sealRt){
+  if(z.sealed)continue;
+  const alive=enemies.some(e=>z.guard==='boss'?e.t==='boss'
+   :z.guard==='dark'?e.t==='dark':MID_TYPES.has(e.t));
+  if(!alive)continue;
+  const ptx=Math.floor((player.x+8)/TS), pty=Math.floor((player.y+10)/TS);
+  if(!(ptx>=z.x1&&ptx<=z.x2&&pty>=z.y1&&pty<=z.y2))continue;
+  // プレイヤーの体が扉にまだ重なっていたら封印しない（壁に埋まるのを防ぐ）
+  const pb={x:player.x+3,y:player.y+6,w:10,h:9};
+  if(z.doors.some(d=>rectHit(pb,{x:d[0]*TS,y:d[1]*TS,w:TS,h:TS})))continue;
+  for(const d of z.doors)setTile(d[0],d[1],T.SEAL);
+  z.sealed=true; shake=8; sfx.roar();
+  playMusic('boss');
+ }
+}
+// 万一 壁の中に埋まってしまったときに近くの床へ押し出す（保険）
+function unstickPlayer(){
+ if(!collideRect(player.x+3,player.y+6,10,9))return;
+ for(let r=1;r<=4;r++){
+  for(const d of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]]){
+   const nx=player.x+d[0]*r*TS*0.5, ny=player.y+d[1]*r*TS*0.5;
+   if(!collideRect(nx+3,ny+6,10,9)){player.x=nx;player.y=ny;return}
+  }
+ }
+}
+// かがり火・クリスタルを作動させる（剣・矢・ブーメラン共通）
+function hitGimmick(tx,ty){
+ const t=tileAt(tx,ty);
+ if(t===T.BRAZIER){
+  setTile(tx,ty,T.BRAZIER_ON); sfx.sw();
+  fxs.push({kind:'spark',x:tx*TS+4,y:ty*TS+2,t:0});
+  let left=0;
+  for(let i=0;i<curT.length;i++)if(curT[i]===T.BRAZIER)left++;
+  if(left===0){
+   S.solved[curId+':fire']=1; openFlameDoors();
+   say('ボッ…！ すべての かがり火が ともり、\nどこかで とびらが ひらいた！');
+  }
+  return true;
+ }
+ if(t===T.CRYS_OFF){
+  setTile(tx,ty,T.CRYS_ON); sfx.sw(); shake=4;
+  S.solved[curId+':crys']=1; openFlameDoors();
+  say('リィン…！ クリスタルが かがやき、\nどこかで とびらが ひらいた！');
+  return true;
+ }
+ return false;
+}
+function openFlameDoors(){
+ for(let i=0;i<curT.length;i++)if(curT[i]===T.DOOR_F)curT[i]=T.FLOOR;
+ sfx.unlock();
+}
+// ---------- 中ボスの思考 ----------
+function updateMid(e,dx,dy,dist){
+ if(e.zone&&!e.zone.sealed)return; // プレイヤーが入室するまで定位置で待機
+ if(e.t==='gslime'){ // キングスライム：ため→とびかかり
+  if(e.st==='ready'){
+   e.ctm--;
+   if(e.ctm<=0){e.st='lunge';e.ctm=18;e.cvx=dx/dist*2.1;e.cvy=dy/dist*2.1;sfx.roar()}
+  }else if(e.st==='lunge'){
+   e.ctm--;
+   moveEntity(e,e.cvx,0,26,24,3,4); moveEntity(e,0,e.cvy,26,24,3,4);
+   if(e.ctm<=0){e.st='idle';e.tmr=0}
+  }else{
+   moveEntity(e,dx/dist*e.spd,0,26,24,3,4); moveEntity(e,0,dy/dist*e.spd,26,24,3,4);
+   if(e.tmr>110){e.st='ready';e.ctm=24;sfx.blip()}
+  }
+ }else if(e.t==='gbat'){ // オオコウモリ：ふらつき飛行＋子コウモリ召喚
+  const wob=Math.sin(e.tmr*0.08)*0.6;
+  moveEntity(e,dx/dist*e.spd+Math.cos(e.tmr*0.05)*wob,0,26,24,3,4);
+  moveEntity(e,0,dy/dist*e.spd+wob,26,24,3,4);
+  if(e.tmr%170===0&&enemies.filter(x=>x.t==='bat').length<2){
+   spawnEnemy('bat',Math.floor(e.x/TS),Math.floor(e.y/TS)); sfx.roar();
+  }
+ }else if(e.t==='dknight'){ // デスナイト：突進→3方向の剣波
+  if(e.st==='ready'){
+   e.ctm--;
+   if(e.ctm<=0){e.st='charge';e.ctm=20;e.cvx=dx/dist*2.4;e.cvy=dy/dist*2.4;sfx.sword()}
+  }else if(e.st==='charge'){
+   e.ctm--;
+   moveEntity(e,e.cvx,0,26,24,3,4); moveEntity(e,0,e.cvy,26,24,3,4);
+   if(e.ctm<=0){
+    e.st='idle'; e.tmr=0;
+    const base=Math.atan2(dy,dx);
+    for(let k=-1;k<=1;k++)shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+     vx:Math.cos(base+k*0.35)*2.2,vy:Math.sin(base+k*0.35)*2.2,life:150,dmg:1});
+    sfx.arrow();
+   }
+  }else{
+   moveEntity(e,dx/dist*e.spd,0,26,24,3,4); moveEntity(e,0,dy/dist*e.spd,26,24,3,4);
+   if(e.tmr>90&&dist<150){e.st='ready';e.ctm=22}
+  }
+ }else if(e.t==='dragon'){ // フロストドラゴン：突進と こおりのブレス
+  if(e.st==='breath'){
+   e.ctm--;
+   if(e.ctm%6===0){
+    const base=Math.atan2(dy,dx);
+    for(let k=-1;k<=1;k++)shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+     vx:Math.cos(base+k*0.25)*2.0,vy:Math.sin(base+k*0.25)*2.0,life:120,dmg:1,ice:true});
+    sfx.arrow();
+   }
+   if(e.ctm<=0){e.st='idle';e.tmr=0}
+  }else if(e.st==='charge'){
+   e.ctm--;
+   moveEntity(e,e.cvx,0,26,24,3,4); moveEntity(e,0,e.cvy,26,24,3,4);
+   if(e.ctm<=0){e.st='idle';e.tmr=0}
+  }else{
+   moveEntity(e,dx/dist*e.spd,0,26,24,3,4); moveEntity(e,0,dy/dist*e.spd,26,24,3,4);
+   if(e.tmr>100){
+    if(Math.random()<0.5){e.st='breath';e.ctm=36;sfx.roar()}
+    else{e.st='charge';e.ctm=22;e.cvx=dx/dist*2.3;e.cvy=dy/dist*2.3;sfx.roar()}
+   }
+  }
+ }else{ // マグマゴーレム：じわじわ迫り 8方向の火炎弾
+  if(e.st==='ready'){
+   e.ctm--;
+   if(e.ctm<=0){
+    e.st='idle'; e.tmr=0;
+    for(let k=0;k<8;k++){
+     const a2=k/8*Math.PI*2;
+     shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+      vx:Math.cos(a2)*1.7,vy:Math.sin(a2)*1.7,life:180,dmg:1});
+    }
+    shake=6; sfx.expl();
+   }
+  }else{
+   moveEntity(e,dx/dist*e.spd,0,26,24,3,4); moveEntity(e,0,dy/dist*e.spd,26,24,3,4);
+   if(e.tmr>130){e.st='ready';e.ctm=24;sfx.roar()}
+  }
+ }
+ if(rectHit({x:e.x+2,y:e.y+2,w:28,h:28},{x:player.x+3,y:player.y+5,w:10,h:10}))
+  hurtPlayer(e.dmg,e.x+8,e.y+8);
+}
+// 剣振り中の攻撃判定
+function updateAttack(){
+ if(player.atk<=0)return;
+ player.atk--;
+ if(player.atk<=3||player.atk>=11)return;
+ const d=DIRV[player.dir];
+ const box={x:player.x+2+d[0]*13,y:player.y+4+d[1]*13,w:12,h:12};
+ for(const e of enemies){
+  if(rectHit(box,{x:e.x+2,y:e.y+2,w:e.w,h:e.h}))
+   damageEnemy(e,S.sword2?3:2,player.x,player.y);
+ }
+ for(let i=shots.length-1;i>=0;i--){ // 敵弾は斬り落とせる
+  const s=shots[i];
+  if(s.from==='e'&&rectHit(box,{x:s.x,y:s.y,w:8,h:8})){
+   shots.splice(i,1); sfx.clink();
+   fxs.push({kind:'spark',x:s.x,y:s.y,t:0});
+  }
+ }
+ // かがり火・クリスタルを剣で作動
+ const gx1=Math.floor(box.x/TS), gy1=Math.floor(box.y/TS);
+ const gx2=Math.floor((box.x+box.w-1)/TS), gy2=Math.floor((box.y+box.h-1)/TS);
+ for(let gy=gy1;gy<=gy2;gy++)for(let gx=gx1;gx<=gx2;gx++)hitGimmick(gx,gy);
+}
+function hurtPlayer(dmg,sx,sy){
+ if(player.inv>0||state!=='play')return;
+ if(S.tunic)dmg=Math.max(1,Math.floor(dmg/2)); // まもりの服でダメージ半減
+ S.hp-=dmg; player.inv=60; sfx.hurt(); shake=6;
+ const l=Math.hypot(player.x-sx,player.y-sy)||1;
+ moveEntity(player,(player.x-sx)/l*8,0,10,9,3,6);
+ moveEntity(player,0,(player.y-sy)/l*8,10,9,3,6);
+ if(S.hp<=0){S.hp=0;gameOver()}
+}
+
+// ---------- 敵の思考 ----------
+function updateEnemies(){
+ for(const e of enemies){
+  if(e.hurt>0)e.hurt--;
+  if(e.stun>0){e.stun--;continue}
+  e.tmr++;
+  const dx=player.x-e.x, dy=player.y-e.y, dist=Math.hypot(dx,dy)||1;
+  if(e.t==='boss'){updateBoss(e,dx,dy,dist);continue}
+  if(e.t==='dark'){updateDark(e,dx,dy,dist);continue}
+  if(MID_TYPES.has(e.t)){updateMid(e,dx,dy,dist);continue}
+  let vx=0, vy=0;
+  if(e.t==='slime'){ // ゆっくり追跡＋徘徊
+   if(dist<90){vx=dx/dist*e.spd;vy=dy/dist*e.spd}
+   else if(e.tmr%120<60){vx=Math.cos(e.dir)*e.spd*0.7;vy=Math.sin(e.dir)*e.spd*0.7}
+   if(e.tmr%120===0)e.dir=Math.random()*Math.PI*2;
+  }else if(e.t==='bat'){ // ふらふら飛んで急接近
+   if(dist<110){
+    const wob=Math.sin(e.tmr*0.15)*0.35;
+    vx=dx/dist*e.spd+Math.cos(e.tmr*0.1)*wob;
+    vy=dy/dist*e.spd+wob;
+   }else{vx=Math.cos(e.tmr*0.05)*0.5;vy=Math.sin(e.tmr*0.07)*0.4}
+  }else if(e.t==='skel'){ // まっすぐ追跡
+   if(dist<130){vx=dx/dist*e.spd;vy=dy/dist*e.spd}
+  }else if(e.t==='mage'){ // 距離を保って魔法弾
+   if(dist<70){vx=-dx/dist*e.spd;vy=-dy/dist*e.spd}
+   else if(dist>110){vx=dx/dist*e.spd*0.6;vy=dy/dist*e.spd*0.6}
+   if(e.tmr%150===0&&dist<180){
+    shots.push({kind:'ball',from:'e',x:e.x+4,y:e.y+4,
+     vx:dx/dist*1.6,vy:dy/dist*1.6,life:180,dmg:1});
+    sfx.arrow();
+   }
+  }else if(e.t==='ghost'){ // 壁をすりぬけてゆっくり追跡
+   if(dist<140){e.x+=dx/dist*e.spd;e.y+=dy/dist*e.spd}
+   else{e.x+=Math.cos(e.tmr*0.03)*0.3;e.y+=Math.sin(e.tmr*0.04)*0.3}
+   e.x=clamp(e.x,TS,(cur.w-2)*TS); e.y=clamp(e.y,TS,(cur.h-2)*TS);
+  }else if(e.t==='knight'){ // 構えてから突進するアーマーナイト
+   if(e.st==='charge'){
+    e.ctm--;
+    moveEntity(e,e.cvx,0,12,10,2,3); moveEntity(e,0,e.cvy,12,10,2,3);
+    if(e.ctm<=0)e.st='idle';
+   }else if(e.st==='ready'){
+    e.ctm--;
+    if(e.ctm<=0){e.st='charge';e.ctm=22;e.cvx=dx/dist*2.2;e.cvy=dy/dist*2.2;sfx.sword()}
+   }else{
+    if(dist<130){vx=dx/dist*e.spd;vy=dy/dist*e.spd}
+    if(e.tmr%140===0&&dist<110){e.st='ready';e.ctm=20;sfx.blip()}
+   }
+  }else if(e.t==='beetle'){ // 直進して壁で反射
+   if(e.mvx===undefined){
+    const d4=[[1,0],[-1,0],[0,1],[0,-1]][Math.floor(Math.random()*4)];
+    e.mvx=d4[0]*e.spd; e.mvy=d4[1]*e.spd;
+   }
+   const px0=e.x, py0=e.y;
+   moveEntity(e,e.mvx,0,12,10,2,3);
+   if(e.mvx&&e.x===px0)e.mvx=-e.mvx;
+   moveEntity(e,0,e.mvy,12,10,2,3);
+   if(e.mvy&&e.y===py0)e.mvy=-e.mvy;
+  }else if(e.t==='wolf'){ // 距離をつめて とびかかるオオカミ
+   if(e.st==='charge'){
+    e.ctm--;
+    moveEntity(e,e.cvx,0,12,10,2,3); moveEntity(e,0,e.cvy,12,10,2,3);
+    if(e.ctm<=0)e.st='idle';
+   }else if(e.st==='ready'){
+    e.ctm--;
+    if(e.ctm<=0){e.st='charge';e.ctm=16;e.cvx=dx/dist*2.6;e.cvy=dy/dist*2.6;sfx.blip()}
+   }else{
+    if(dist<140){vx=dx/dist*e.spd;vy=dy/dist*e.spd}
+    if(e.tmr%100===0&&dist<120){e.st='ready';e.ctm=12}
+   }
+  }else if(e.t==='archer'){ // その場から速い矢を放つ
+   if(dist<40){vx=-dx/dist*0.5;vy=-dy/dist*0.5}
+   else{vx=Math.cos(e.tmr*0.06)*0.2;vy=0}
+   if(e.tmr%100===0&&dist>40&&dist<170){
+    shots.push({kind:'ball',from:'e',x:e.x+4,y:e.y+4,
+     vx:dx/dist*2.6,vy:dy/dist*2.6,life:120,dmg:1});
+    sfx.arrow();
+   }
+  }else if(e.t==='shadow'){ // 影の分身：壁をすりぬけて追う
+   if(dist<200){e.x+=dx/dist*e.spd;e.y+=dy/dist*e.spd}
+   e.x=clamp(e.x,TS,(cur.w-2)*TS); e.y=clamp(e.y,TS,(cur.h-2)*TS);
+  }else if(e.t==='iceslime'){ // 氷の上をすべるように追う
+   if(e.svx===undefined){e.svx=0;e.svy=0}
+   if(dist<110){e.svx+=dx/dist*0.05;e.svy+=dy/dist*0.05}
+   e.svx*=0.965; e.svy*=0.965;
+   e.svx=clamp(e.svx,-1.3,1.3); e.svy=clamp(e.svy,-1.3,1.3);
+   const ix0=e.x, iy0=e.y;
+   moveEntity(e,e.svx,0,12,10,2,3); if(e.x===ix0)e.svx=-e.svx*0.6;
+   moveEntity(e,0,e.svy,12,10,2,3); if(e.y===iy0)e.svy=-e.svy*0.6;
+  }else if(e.t==='imp'){ // 瞬間移動でまわりこむインプ
+   if(e.tmr%140===110){
+    fxs.push({kind:'poof',x:e.x,y:e.y,t:0});
+    for(let k=0;k<14;k++){
+     const a2=Math.random()*Math.PI*2, rr=40+Math.random()*30;
+     const nx=player.x+Math.cos(a2)*rr, ny=player.y+Math.sin(a2)*rr;
+     if(!collideRect(nx+2,ny+3,12,10)){e.x=nx;e.y=ny;break}
+    }
+    fxs.push({kind:'poof',x:e.x,y:e.y,t:0}); sfx.blip();
+   }else if(dist<120){vx=dx/dist*e.spd;vy=dy/dist*e.spd}
+  }else if(e.t==='turret'){ // うごかない石像ほうだい（4方向の弾）
+   if(e.tmr%120===0&&dist<160){
+    for(let k=0;k<4;k++){
+     const a2=k*Math.PI/2+(Math.floor(e.tmr/120)%2?Math.PI/4:0);
+     shots.push({kind:'ball',from:'e',x:e.x+4,y:e.y+4,
+      vx:Math.cos(a2)*1.8,vy:Math.sin(a2)*1.8,life:130,dmg:1});
+    }
+    sfx.arrow();
+   }
+  }else if(e.t==='flame'){ // その場を回りつづける火の玉
+   if(e.ox===undefined){e.ox=e.x;e.oy=e.y}
+   e.x=e.ox+Math.cos(e.tmr*0.045)*22;
+   e.y=e.oy+Math.sin(e.tmr*0.045)*22;
+  }
+  moveEntity(e,vx,0,12,10,2,3);
+  moveEntity(e,0,vy,12,10,2,3);
+  if(rectHit({x:e.x+2,y:e.y+2,w:e.w,h:e.h},{x:player.x+3,y:player.y+5,w:10,h:10}))
+   hurtPlayer(e.dmg,e.x,e.y);
+ }
+}
+// 影の王ネビュラ（裏ボス）：3段階に変化する
+function updateDark(e,dx,dy,dist){
+ if(e.zone&&!e.zone.sealed)return; // 入室するまで待機
+ // フェーズ移行
+ if(e.hp<=e.maxHp/3&&e.phase<3){
+  e.phase=3; sfx.roar(); shake=16; e.st='idle'; e.tmr=0;
+  fxs.push({kind:'expl',x:e.x+14,y:e.y+14,t:0});
+ }else if(e.hp<=e.maxHp*2/3&&e.phase<2){
+  e.phase=2; sfx.roar(); shake=12; e.st='summon'; e.tmr=0;
+ }
+ e.tmr++;
+ const spd=e.phase===3?1.35:e.phase===2?1.05:0.85;
+ if(e.st==='summon'){ // 影の分身を呼ぶ
+  if(e.tmr===14){
+   for(let k=0;k<2;k++){
+    for(let tr=0;tr<12;tr++){
+     const a2=Math.random()*Math.PI*2, rr=40+Math.random()*24;
+     const nx=e.x+12+Math.cos(a2)*rr, ny=e.y+12+Math.sin(a2)*rr;
+     if(!collideRect(nx+2,ny+3,12,10)){
+      spawnEnemy('shadow',Math.floor(nx/TS),Math.floor(ny/TS));
+      fxs.push({kind:'poof',x:nx,y:ny,t:0});
+      break;
+     }
+    }
+   }
+   sfx.expl();
+  }
+  if(e.tmr>34){e.st='idle';e.tmr=0}
+ }else if(e.st==='cast'){ // 闇の弾幕
+  const every=e.phase===3?8:14;
+  if(e.tmr%every===0){
+   const n=e.phase===3?10:6;
+   const off=e.tmr*0.08;
+   for(let k=0;k<n;k++){
+    const a2=k/n*Math.PI*2+off;
+    shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+     vx:Math.cos(a2)*1.9,vy:Math.sin(a2)*1.9,life:200,dmg:e.phase===3?2:1});
+   }
+   sfx.arrow();
+  }
+  if(e.tmr>(e.phase===3?56:40)){e.st='idle';e.tmr=0}
+ }else if(e.st==='tele'){ // 瞬間移動して追いつめる
+  if(e.tmr===10){
+   fxs.push({kind:'poof',x:e.x+12,y:e.y+12,t:0});
+   const z=e.zone||{x1:3,y1:1,x2:26,y2:9};
+   for(let tr=0;tr<24;tr++){
+    const rx=z.x1+1+Math.floor(Math.random()*(z.x2-z.x1-2));
+    const ry=z.y1+1+Math.floor(Math.random()*(z.y2-z.y1-2));
+    if(!collideRect(rx*TS+3,ry*TS+4,26,24)){e.x=rx*TS;e.y=ry*TS;break}
+   }
+   fxs.push({kind:'poof',x:e.x+12,y:e.y+12,t:0}); sfx.roar();
+   const base=Math.atan2(player.y-e.y,player.x-e.x);
+   for(let k=-2;k<=2;k++)shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+    vx:Math.cos(base+k*0.22)*2.3,vy:Math.sin(base+k*0.22)*2.3,life:170,dmg:1});
+  }
+  if(e.tmr>26){e.st='idle';e.tmr=0}
+ }else{ // 追跡
+  moveEntity(e,dx/dist*spd,0,26,24,3,4);
+  moveEntity(e,0,dy/dist*spd,26,24,3,4);
+  const wait=e.phase===3?45:e.phase===2?65:85;
+  if(e.tmr>wait){
+   const r=Math.random();
+   if(e.phase>=2&&r<0.3&&enemies.filter(x=>x.t==='shadow').length<3)e.st='summon';
+   else if(r<0.65)e.st='cast';
+   else e.st='tele';
+   e.tmr=0;
+  }
+ }
+ if(rectHit({x:e.x+2,y:e.y+2,w:28,h:28},{x:player.x+3,y:player.y+5,w:10,h:10}))
+  hurtPlayer(e.dmg,e.x+12,e.y+12);
+}
+// 魔王バルガン：追跡→扇状弾→ワープ（HP半分でフェーズ2）
+function updateBoss(e,dx,dy,dist){
+ if(e.zone&&!e.zone.sealed)return; // プレイヤーが入室するまで定位置で待機
+ if(e.hp<=e.maxHp/2&&e.phase===1){e.phase=2;sfx.roar();shake=10}
+ e.tmr++;
+ const spd=e.phase===2?1.05:0.7;
+ if(e.st==='idle'){
+  moveEntity(e,dx/dist*spd,0,26,24,3,4);
+  moveEntity(e,0,dy/dist*spd,26,24,3,4);
+  if(e.tmr>(e.phase===2?70:100)){e.st='shoot';e.tmr=0}
+ }else if(e.st==='shoot'){
+  if(e.tmr===10||e.tmr===30||(e.phase===2&&e.tmr===50)){
+   const base=Math.atan2(dy,dx), n=e.phase===2?5:3;
+   for(let k=0;k<n;k++){
+    const a=base+(k-(n-1)/2)*0.3;
+    shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+     vx:Math.cos(a)*1.9,vy:Math.sin(a)*1.9,life:200,dmg:e.phase===2?2:1});
+   }
+   sfx.arrow();
+  }
+  if(e.tmr>60){e.st='tele';e.tmr=0}
+ }else if(e.st==='tele'){
+  if(e.tmr===12){ // ボス部屋内へワープ
+   fxs.push({kind:'poof',x:e.x+8,y:e.y+8,t:0});
+   for(let tries=0;tries<20;tries++){
+    const z=e.zone||{x1:12,y1:1,x2:18,y2:5};
+    const rx=z.x1+1+Math.floor(Math.random()*(z.x2-z.x1-2));
+    const ry=z.y1+1+Math.floor(Math.random()*(z.y2-z.y1-2));
+    if(!SOLID.has(tileAt(rx,ry))&&!SOLID.has(tileAt(rx+1,ry+1))){
+     e.x=rx*TS; e.y=ry*TS; break;
+    }
+   }
+   fxs.push({kind:'poof',x:e.x+8,y:e.y+8,t:0});
+   sfx.roar();
+   if(e.phase===2){ // フェーズ2はリング弾つき
+    for(let k=0;k<8;k++){
+     const a=k/8*Math.PI*2;
+     shots.push({kind:'ball',from:'e',x:e.x+12,y:e.y+12,
+      vx:Math.cos(a)*1.5,vy:Math.sin(a)*1.5,life:220,dmg:1});
+    }
+   }
+  }
+  if(e.tmr>26){e.st='idle';e.tmr=0}
+ }
+ if(rectHit({x:e.x+2,y:e.y+2,w:28,h:28},{x:player.x+3,y:player.y+5,w:10,h:10}))
+  hurtPlayer(2,e.x+8,e.y+8);
+}
+function bossDeath(e){
+ const i=enemies.indexOf(e); if(i>=0)enemies.splice(i,1);
+ shots=shots.filter(s=>s.from!=='e');
+ S.flags.beat=1; playMusic(null); shake=20;
+ for(const z of sealRt)if(z.guard==='boss'&&z.sealed)unsealZone(z);
+ player.inv=240; // 撃破演出のあいだは無敵
+ for(let k=0;k<10;k++)
+  fxs.push({kind:'expl',x:e.x+Math.random()*28,y:e.y+Math.random()*28,t:-k*5});
+ sfx.expl();
+ setTimeout(()=>sfx.expl(),300);
+ setTimeout(()=>sfx.fanfare(),900);
+ setTimeout(()=>{
+  say(['『ぐ……おおお…… ばかな……\nこの バルガンが……！』',
+       'まおうバルガンは ひかりに つつまれ、\nきえさった……！'],
+   ()=>{startEnding()});
+ },1400);
+}
+
+// ---------- 裏ボス撃破 ----------
+function darkDeath(e){
+ const i=enemies.indexOf(e); if(i>=0)enemies.splice(i,1);
+ enemies=enemies.filter(x=>x.t!=='shadow'); // 分身も消える
+ shots=shots.filter(s=>s.from!=='e');
+ S.flags.trueEnd=1; playMusic(null); shake=24;
+ for(const z of sealRt)if(z.sealed)unsealZone(z);
+ player.inv=240; // 撃破演出のあいだは無敵
+ for(let k=0;k<14;k++)
+  fxs.push({kind:'expl',x:e.x+Math.random()*28,y:e.y+Math.random()*28,t:-k*4});
+ sfx.expl();
+ setTimeout(()=>sfx.expl(),320);
+ setTimeout(()=>sfx.fanfare(),900);
+ setTimeout(()=>{
+  say(['『……よくぞ ここまで きた、ちいさき ひかりよ。',
+       '　バルガンは わが てあしに すぎぬ。\n　やみは いつでも うまれる……',
+       '　だが きょうは―― そなたの かちだ。』',
+       '影の王ネビュラは しずかに とけ、\n深淵に ほんとうの しずけさが もどった。'],
+   ()=>{startEnding(true)});
+ },1500);
+}
+
+// ---------- ゲームオーバー ----------
+function gameOver(){
+ playMusic(null); sfx.roar(); state='over';
+ setTimeout(()=>{$('overOv').classList.remove('hidden')},900);
+}
+
+// ---------- ピックアップ（ハート・コイン） ----------
+function updatePickups(){
+ for(let i=pickups.length-1;i>=0;i--){
+  const p=pickups[i]; p.life--;
+  if(p.life<=0){pickups.splice(i,1);continue}
+  if(rectHit({x:p.x,y:p.y,w:8,h:8},{x:player.x+2,y:player.y+4,w:12,h:12})){
+   collectPickup(p); pickups.splice(i,1);
+  }
+ }
+}
+function collectPickup(p){
+ if(p.kind==='heart'){S.hp=Math.min(S.maxHp,S.hp+2);sfx.heart()}
+ else{S.coins=Math.min(999,S.coins+1);sfx.coin()}
+}
+
+// ---------- プレイヤー更新 ----------
+function updatePlayer(){
+ if(msgCd>0)msgCd--;
+ if(player.inv>0)player.inv--;
+ let dx=inp.dx, dy=inp.dy;
+ if(player.atk>0){dx=0;dy=0} // 攻撃中は足を止める
+ if(dx||dy){
+  player.anim++;
+  if(Math.abs(dx)>Math.abs(dy))player.dir=dx>0?'r':'l';
+  else player.dir=dy>0?'d':'u';
+ }else player.anim=0;
+ const sp=1.35, hits=[];
+ const onIce=tileAt(Math.floor((player.x+8)/TS),Math.floor((player.y+10)/TS))===T.ICE;
+ if(onIce){ // こおり床では すべる（慣性がつく）
+  player.vx=(player.vx||0)*0.94+dx*sp*0.06;
+  player.vy=(player.vy||0)*0.94+dy*sp*0.06;
+  player.vx=clamp(player.vx,-sp,sp); player.vy=clamp(player.vy,-sp,sp);
+  const ix=player.x, iy=player.y;
+  moveEntity(player,player.vx,0,10,9,3,6,hits); if(player.x===ix)player.vx=0;
+  moveEntity(player,0,player.vy,10,9,3,6,hits); if(player.y===iy)player.vy=0;
+ }else{
+  player.vx=dx*sp; player.vy=dy*sp;
+  moveEntity(player,dx*sp,0,10,9,3,6,hits);
+  moveEntity(player,0,dy*sp,10,9,3,6,hits);
+ }
+ // 触れた壁のギミック処理（押しブロック優先）
+ let blockTouched=false;
+ if(hits.length){
+  let h0=null;
+  for(const hh of hits)if(hh[2]===T.BLOCK){h0=hh;blockTouched=true;break}
+  if(!h0)h0=hits[0];
+  touchTile(h0[0],h0[1],h0[2]);
+ }
+ if(!blockTouched){player.pushKey='';player.push=0}
+ // ワープ判定（入口・階段の上に立ったとき）
+ const ptx=Math.floor((player.x+8)/TS), pty=Math.floor((player.y+10)/TS);
+ const wtile=tileAt(ptx,pty);
+ let warp=cur.warps[ptx+','+pty];
+ if(curId==='overworld'&&ptx===76&&pty===49&&S.flags.eyeOpen)
+  warp={map:'d2',x:15,y:21};
+ if((wtile===T.ENT||wtile===T.STAIR_U)&&warp){
+  if(!justWarped){warpTo(warp.map,warp.x,warp.y);return}
+ }else justWarped=false;
+ // トゲ床（トゲが出ているときに乗るとダメージ）
+ if(tileAt(ptx,pty)===T.SPIKE&&spikeF===1)hurtPlayer(1,player.x,player.y+4);
+ // ボス・中ボス部屋の封印チェック
+ updateSeals();
+ unstickPlayer();
+ if(inp.aP)doAction();
+ if(inp.bP)useItem();
+ updateAttack();
+}
+function updateCam(){
+ cam.x=clamp(player.x+8-W/2,0,cur.w*TS-W);
+ cam.y=clamp(player.y+8-H/2,0,cur.h*TS-H);
+}
+
+// ---------- 描画 ----------
+function render(){
+ cx.fillStyle='#000'; cx.fillRect(0,0,W,H);
+ if(state==='title'){renderTitle();return}
+ if(state==='ending'){renderEnding();return}
+ if(!cur)return;
+ cx.save();
+ if(shake>0){
+  shake--;
+  cx.translate((Math.random()-0.5)*shake*0.8,(Math.random()-0.5)*shake*0.8);
+ }
+ const ox=-Math.floor(cam.x), oy=-Math.floor(cam.y);
+ // タイル（画面内だけ描画して60fpsを保つ）
+ const x1=Math.floor(cam.x/TS), y1=Math.floor(cam.y/TS);
+ const x2=Math.min(cur.w-1,x1+Math.ceil(W/TS)), y2=Math.min(cur.h-1,y1+Math.ceil(H/TS));
+ for(let ty=y1;ty<=y2;ty++)for(let tx=x1;tx<=x2;tx++){
+  const id=curT[ty*cur.w+tx];
+  const fr=id===T.SPIKE?spikeF:(ANIM_TILES.has(id)?waterF:0);
+  cx.drawImage(atlas,id*TS,fr*TS,TS,TS,tx*TS+ox,ty*TS+oy,TS,TS);
+ }
+ // ドロップアイテム
+ for(const p of pickups){
+  if(p.life<90&&Math.floor(p.life/4)%2)continue; // 消える直前は点滅
+  if(p.kind==='heart')heartPix(Math.floor(p.x)+ox,Math.floor(p.y)+oy+1,'#ff4a6a');
+  else{
+   cx.fillStyle='#ffd23e'; cx.fillRect(Math.floor(p.x)+ox+1,Math.floor(p.y)+oy,5,7);
+   cx.fillStyle='#c79216'; cx.fillRect(Math.floor(p.x)+ox+2,Math.floor(p.y)+oy+2,3,3);
+  }
+ }
+ // NPC
+ for(const n of npcs)drawNPC(n,n.x*TS+ox,n.y*TS+oy);
+ // 敵とプレイヤー（Y座標順に描いて前後関係を出す）
+ const drawList=[];
+ for(const e of enemies)
+  drawList.push({y:e.y+((e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t))?32:16),
+   fn:()=>drawEnemy(e,Math.floor(e.x)+ox,Math.floor(e.y)+oy)});
+ drawList.push({y:player.y+16,fn:()=>{
+  drawHero(Math.floor(player.x)+ox,Math.floor(player.y)+oy);
+  drawSwordFx(Math.floor(player.x)+ox,Math.floor(player.y)+oy);
+ }});
+ drawList.sort((a,b)=>a.y-b.y);
+ for(const d of drawList)d.fn();
+ // 弾
+ for(const s of shots)drawShot(s,ox,oy);
+ // エフェクト
+ for(let i=fxs.length-1;i>=0;i--){
+  const e=fxs[i]; e.t++;
+  if(e.t>24){fxs.splice(i,1);continue}
+  if(e.t<0)continue;
+  drawFx(e,ox,oy);
+ }
+ cx.restore();
+ renderHUD();
+ if(state==='over')renderOverScreen();
+ if(dlg)renderDialog();
+ if(fade.t>0){cx.fillStyle='rgba(0,0,0,'+fade.t.toFixed(2)+')';cx.fillRect(0,0,W,H)}
+}
+function drawShot(s,ox,oy){
+ const x=Math.floor(s.x)+ox, y=Math.floor(s.y)+oy;
+ if(s.kind==='arrow'){
+  cx.fillStyle='#a8763e';
+  if(s.vx)cx.fillRect(x,y+3,8,2); else cx.fillRect(x+3,y,2,8);
+  cx.fillStyle='#e8ecf4';
+  if(s.vx>0)cx.fillRect(x+7,y+2,2,4);
+  else if(s.vx<0)cx.fillRect(x-1,y+2,2,4);
+  else if(s.vy>0)cx.fillRect(x+2,y+7,4,2);
+  else cx.fillRect(x+2,y-1,4,2);
+ }else if(s.kind==='boom'){
+  cx.save(); cx.translate(x+4,y+4); cx.rotate(s.rot);
+  cx.fillStyle='#e8b04a'; cx.fillRect(-5,-2,10,3); cx.fillRect(-2,-5,3,10);
+  cx.restore();
+ }else{ // 魔法弾
+  cx.fillStyle=(s.dmg>=2)?'#ff5a3c':'#c85aff';
+  cx.beginPath(); cx.arc(x+4,y+4,4,0,7); cx.fill();
+  cx.fillStyle='#fff'; cx.fillRect(x+3,y+3,2,2);
+ }
+}
+function drawFx(e,ox,oy){
+ const x=e.x+ox, y=e.y+oy, t=e.t, a=1-t/24;
+ if(e.kind==='poof'){
+  cx.strokeStyle='rgba(255,255,255,'+a.toFixed(2)+')';
+  cx.beginPath(); cx.arc(x+8,y+8,t*0.7+2,0,7); cx.stroke();
+ }else if(e.kind==='spark'){
+  cx.fillStyle='#ffe066';
+  for(let k=0;k<4;k++){
+   const ang=k*1.57+t*0.2;
+   cx.fillRect(x+4+Math.cos(ang)*t*0.6,y+4+Math.sin(ang)*t*0.6,2,2);
+  }
+ }else if(e.kind==='expl'){
+  cx.fillStyle='rgba(255,'+Math.max(40,150-t*5)+',40,'+a.toFixed(2)+')';
+  cx.beginPath(); cx.arc(x,y,t*1.1+3,0,7); cx.fill();
+ }else if(e.kind==='healring'){
+  cx.strokeStyle='rgba(120,255,150,'+a.toFixed(2)+')';
+  cx.beginPath(); cx.arc(x+8,y+8,20-t*0.6,0,7); cx.stroke();
+ }
+}
+
+// ---------- HUD ----------
+function renderHUD(){
+ cx.fillStyle='rgba(6,8,18,.55)'; cx.fillRect(0,0,W,15);
+ cx.textBaseline='top'; cx.textAlign='left'; cx.font='7px monospace';
+ // ハート
+ for(let i=0;i<S.maxHp/2;i++){
+  const st=S.hp>=(i+1)*2?2:(S.hp===i*2+1?1:0);
+  heartPix(5+i*9,4,'#401826');
+  if(st===2)heartPix(5+i*9,4,'#ff4a6a');
+  else if(st===1)heartHalf(5+i*9,4,'#ff4a6a');
+ }
+ // コイン
+ cx.fillStyle='#ffd23e'; cx.beginPath(); cx.arc(70,7,3.5,0,7); cx.fill();
+ cx.fillStyle='#fff'; cx.fillText('x'+S.coins,76,4);
+ // カギ
+ cx.fillStyle='#e8d23e';
+ cx.fillRect(100,3,4,4); cx.fillRect(101,7,2,6); cx.fillRect(103,9,2,1); cx.fillRect(103,11,2,1);
+ cx.fillStyle='#fff'; cx.fillText('x'+S.keys,107,4);
+ // 紋章（4つ）
+ for(let i=0;i<4;i++){
+  const bx=128+i*11;
+  cx.fillStyle=S.crests>i?'#7ae0ff':'#2a3a55';
+  cx.beginPath(); cx.moveTo(bx+4,2); cx.lineTo(bx+8,7); cx.lineTo(bx+4,12); cx.lineTo(bx,7);
+  cx.closePath(); cx.fill();
+ }
+ // ボスキー
+ if(S.bossKey){
+  cx.fillStyle='#c85aff';
+  cx.fillRect(175,3,4,4); cx.fillRect(176,7,2,6); cx.fillRect(178,9,2,1);
+ }
+ // ミニマップ（右上）
+ if(minimap){
+  const mw=minimap.width, mh=minimap.height;
+  cx.fillStyle='rgba(6,8,18,.5)'; cx.fillRect(W-mw-6,17,mw+4,mh+4);
+  cx.globalAlpha=0.85; cx.drawImage(minimap,W-mw-4,19); cx.globalAlpha=1;
+  if(Math.floor(perf/16)%2){
+   cx.fillStyle='#fff';
+   cx.fillRect(W-mw-4+Math.floor(player.x/TS*(mw/cur.w)),
+               19+Math.floor(player.y/TS*(mh/cur.h)),2,2);
+  }
+ }
+ // ボスHPバー
+ const guard=enemies.find(e=>e.t==='boss'||e.t==='dark'||MID_TYPES.has(e.t));
+ if(guard&&sealRt.some(z=>z.sealed)){
+  cx.fillStyle='#40101a'; cx.fillRect(48,H-11,160,6);
+  cx.fillStyle='#e03050'; cx.fillRect(48,H-11,Math.max(0,160*guard.hp/guard.maxHp),6);
+  cx.strokeStyle='#fff'; cx.strokeRect(47.5,H-11.5,161,7);
+ }
+}
+function renderOverScreen(){
+ cx.fillStyle='rgba(60,0,10,.55)'; cx.fillRect(0,0,W,H);
+ cx.textAlign='center'; cx.textBaseline='top';
+ cx.font='bold 16px serif'; cx.fillStyle='#ff5a6a';
+ cx.fillText('ゲームオーバー',W/2,H/2-16);
+ cx.textAlign='left';
+}
+
+// ---------- 会話ウィンドウ描画 ----------
+function renderDialog(){
+ const bx=6, by=H-58, bw=W-12, bh=52;
+ cx.fillStyle='rgba(8,12,32,.92)'; cx.fillRect(bx,by,bw,bh);
+ cx.strokeStyle='#7a90d8'; cx.strokeRect(bx+1.5,by+1.5,bw-3,bh-3);
+ const page=dlg.pages[dlg.pi];
+ if(dlg.ci<page.length){ // タイプライター表示
+  dlg.ci=Math.min(page.length,dlg.ci+2);
+  if(dlg.ci%6===0)sfx.blip();
+ }
+ cx.font='9px sans-serif'; cx.fillStyle='#eef2ff'; cx.textBaseline='top'; cx.textAlign='left';
+ const lines=wrapText(page.slice(0,dlg.ci),bw-16);
+ for(let i=0;i<lines.length;i++)cx.fillText(lines[i],bx+8,by+6+i*11);
+ const done=dlg.ci>=page.length;
+ if(done&&dlg.choices&&dlg.pi===dlg.pages.length-1){ // 選択肢
+  for(let i=0;i<dlg.choices.length;i++){
+   cx.fillStyle=i===dlg.sel?'#ffe066':'#9aa6cc';
+   cx.fillText((i===dlg.sel?'▶ ':'　 ')+dlg.choices[i],bx+96,by+6+(lines.length+i)*11);
+  }
+ }else if(done&&Math.floor(perf/16)%2){
+  cx.fillStyle='#ffe066'; cx.fillText('▼',bx+bw-14,by+bh-12);
+ }
+}
+function wrapText(t,maxW){
+ const out=[];
+ const segs=t.split('\n');
+ for(const seg of segs){
+  let line='';
+  for(const ch of seg){
+   if(cx.measureText(line+ch).width>maxW){out.push(line);line=ch}
+   else line+=ch;
+  }
+  out.push(line);
+ }
+ return out;
+}
+
+// ---------- タイトル画面 ----------
+let titleT=0;
+function renderTitle(){
+ titleT++;
+ const g=cx.createLinearGradient(0,0,0,H);
+ g.addColorStop(0,'#0a1030'); g.addColorStop(0.6,'#20265c'); g.addColorStop(1,'#3c2a60');
+ cx.fillStyle=g; cx.fillRect(0,0,W,H);
+ // 星空
+ const r=mulberry32(7);
+ for(let i=0;i<50;i++){
+  const x=r()*W, y=r()*H*0.55;
+  cx.fillStyle='rgba(255,255,255,'+(0.3+0.7*Math.abs(Math.sin(titleT*0.03+i))).toFixed(2)+')';
+  cx.fillRect(x,y,1,1);
+ }
+ // 月
+ cx.fillStyle='#ffe9a8'; cx.beginPath(); cx.arc(212,34,13,0,7); cx.fill();
+ // 魔王城のシルエット
+ cx.fillStyle='#0c0a1c';
+ cx.fillRect(96,98,64,50); cx.fillRect(86,108,12,40); cx.fillRect(158,108,12,40);
+ cx.fillRect(88,100,8,10); cx.fillRect(160,100,8,10);
+ for(let i=0;i<5;i++)cx.fillRect(98+i*13,92,7,8);
+ cx.fillStyle='#ffb040'; cx.fillRect(124,118,8,12); // 窓明かり
+ cx.fillStyle='#101828'; cx.fillRect(0,148,W,44);   // 地面
+ // ロゴ
+ cx.textAlign='center'; cx.textBaseline='alphabetic';
+ cx.font='bold 26px serif';
+ cx.fillStyle='#20242c'; cx.fillText('紋章の勇者',W/2+2,54);
+ cx.fillStyle='#ffe066'; cx.fillText('紋章の勇者',W/2,52);
+ cx.font='11px serif'; cx.fillStyle='#cfd6ff'; cx.fillText('〜 封魔の二紋 〜',W/2,68);
+ cx.font='9px sans-serif';
+ if(Math.floor(titleT/30)%2){cx.fillStyle='#fff';cx.fillText('- PRESS START -',W/2,150)}
+ cx.font='7px sans-serif'; cx.fillStyle='#7a86ac';
+ cx.fillText('タップ / Enter で スタート',W/2,168);
+ // クリア記録
+ try{
+  const sv=store.get(SAVE_KEY);
+  if(sv){
+   const f=(JSON.parse(sv).S||{}).flags||{};
+   if(f.trueEnd){cx.fillStyle='#ffe066';cx.fillText('★ TRUE END 達成 ★',W/2,182)}
+   else if(f.beat){cx.fillStyle='#9aa6cc';cx.fillText('☆ 魔王 撃破ずみ ☆',W/2,182)}
+  }
+ }catch(e){}
+ cx.textAlign='left'; cx.textBaseline='top';
+}
+function titleTap(){
+ if(state!=='title')return;
+ ensureAudio();
+ if(store.get(SAVE_KEY)){
+  $('tCont').disabled=false;
+  $('titleOv').classList.remove('hidden');
+ }else startNew();
+}
+function startNew(){
+ $('titleOv').classList.add('hidden');
+ S=newS();
+ loadMap('overworld',50,61);
+ state='play';
+ say(['とおいむかし、せかいは「光の紋章」の\nちからで まもられていた。',
+      'だが いま―― まおうバルガンが よみがえり、\n紋章は 四つに くだけちった……',
+      'わかき勇者よ。四つの紋章を あつめ、\n魔王城の けっかいを うちやぶるのだ！',
+      '（まずは ちかくの 老人に はなしかけよう。\nはなす・しらべる：Aボタン）']);
+}
+function contGame(){
+ $('titleOv').classList.add('hidden');
+ if(loadGame())state='play'; else startNew();
+}
+function toTitle(){
+ $('menuOv').classList.add('hidden');
+ $('overOv').classList.add('hidden');
+ dlg=null; playMusic(null); state='title'; titleT=0;
+}
+
+// ---------- エンディング（スタッフロール風） ----------
+const END_LINES=['まおうバルガンは ほろび、','せかいに ひかりが もどった。','',
+ 'よっつの紋章は ひとつとなり、','ふたたび だいちを てらす。','',
+ 'だが―― 古代いせきの ふかくで','なにかが まだ、しずかに めざめている……','','','― THE END ―','',
+ 'つづきから で 冒険を つづけられます'];
+const TRUE_END_LINES=['影の王ネビュラは 深淵へと きえた。','','やみを うみだす みなもとは たたれ、',
+ 'よっつの紋章は とわに かがやきつづける。','','ゆうしゃの なは でんせつとなり、',
+ 'こどもたちの うたに かたりつがれた。','','そして せかいは、','ほんとうの あさを むかえた――','','',
+ '― TRUE END ―','','すべての ぼうけんを クリアしました！','あそんでくれて ありがとう！'];
+let endLines=END_LINES;
+function startEnding(isTrue){
+ state='ending'; endT=0; endTapped=false;
+ endLines=isTrue?TRUE_END_LINES:END_LINES;
+ playMusic('over'); saveGame(false);
+}
+function endScrollDone(){return H+20-endT*0.45+(endLines.length-1)*16<H*0.55}
+function renderEnding(){
+ cx.fillStyle='#05070f'; cx.fillRect(0,0,W,H);
+ cx.textAlign='center'; cx.textBaseline='alphabetic'; cx.font='10px serif';
+ const startY=H+20-endT*0.45;
+ for(let i=0;i<endLines.length;i++){
+  const y=startY+i*16;
+  if(y>-10&&y<H+14){
+   cx.fillStyle=endLines[i].indexOf('END')>=0?'#ffe066':'#dfe6ff';
+   cx.fillText(endLines[i],W/2,y);
+  }
+ }
+ if(endScrollDone()&&Math.floor(perf/20)%2){
+  cx.fillStyle='#9aa6cc'; cx.font='8px sans-serif';
+  cx.fillText('タップ / Aボタンで タイトルへ',W/2,H-12);
+ }
+ cx.textAlign='left'; cx.textBaseline='top';
+}
+
+// ---------- メインループ（固定タイムステップ：120Hz端末でも等速） ----------
+let last=0, acc=0;
+function loop(ts){
+ requestAnimationFrame(loop);
+ if(!last)last=ts;
+ acc+=Math.min(60,ts-last); last=ts;
+ let steps=0;
+ while(acc>=16.6&&steps<3){step();acc-=16.6;steps++}
+ render();
+}
+function step(){
+ perf++;
+ if(perf%24===0)waterF=1-waterF;
+ spikeF=Math.floor(perf/48)%2;
+ pollInput();
+ updateFade();
+ if(state==='play'&&!fade.cb){
+  updatePlayer(); updateEnemies(); updateShots(); updatePickups(); updateCam();
+ }else if(state==='dialog'){
+  updateDialog(); updateCam();
+ }else if(state==='ending'){
+  endT++;
+  if((inp.aP||endTapped)&&endScrollDone()){endTapped=false;toTitle()}
+  else endTapped=false;
+ }
+}
+
+// ---------- UI配線 ----------
+function bindBtn(el,fn){
+ el.addEventListener('touchstart',e=>{e.stopPropagation();e.preventDefault();ensureAudio();fn()},{passive:false});
+ el.addEventListener('click',()=>{ensureAudio();fn()});
+}
+function selectItem(i){
+ if(!S)return;
+ if((i===0&&!S.bow)||(i===1&&!S.boomerang)){sfx.deny();return}
+ S.sel=i; sfx.cursor(); updateItemBar();
+}
+function updateItemBar(){
+ if(!S)return;
+ const slots=document.querySelectorAll('.slot');
+ slots[0].classList.toggle('lock',!S.bow);
+ slots[1].classList.toggle('lock',!S.boomerang);
+ slots[2].classList.toggle('lock',S.potions<=0);
+ for(let i=0;i<slots.length;i++)slots[i].classList.toggle('sel',S.sel===i);
+ slots[2].querySelector('.cnt').textContent=S.potions>0?('x'+S.potions):'';
+}
+document.querySelectorAll('.slot').forEach(el=>{
+ el.addEventListener('touchstart',e=>{
+  e.stopPropagation(); e.preventDefault(); ensureAudio();
+  selectItem(+el.dataset.i);
+ },{passive:false});
+ el.addEventListener('mousedown',()=>selectItem(+el.dataset.i));
+});
+// スロットのアイコンを描画
+(function(){
+ const types=['bow','boomerang','potion'];
+ document.querySelectorAll('.slot canvas').forEach((c,i)=>{
+  const g=c.getContext('2d');
+  g.imageSmoothingEnabled=false; g.scale(2,2);
+  drawIcon(g,types[i]);
+ });
+})();
+function toggleMute(){
+ setMute(!muted);
+ $('muteBtn').textContent=muted?'✕':'♪';
+ $('mSound').textContent='音：'+(muted?'OFF':'ON');
+ if(S&&cur)saveGame(false);
+}
+function toggleMenu(){
+ if(state==='title'||state==='ending'||state==='over')return;
+ const ov=$('menuOv');
+ if(ov.classList.contains('hidden')){
+  ov.classList.remove('hidden'); prevState=state; state='menu';
+ }else closeMenu();
+}
+function closeMenu(){$('menuOv').classList.add('hidden');state=prevState}
+const HELP_TEXT=[
+ '【そうさほうほう】\nがめん左：うごく（ジョイスティック）\nA：剣をふる ／ はなす・しらべる',
+ 'B：アイテムをつかう\n（がめん下の アイコンで もちかえ）\n☰：メニュー ／ ⛶：フルスクリーン',
+ 'キーボード：WASD/矢印で いどう\nZ・Space＝A、X・Shift＝B\n1〜3で もちかえ、Esc＝メニュー',
+];
+bindBtn($('muteBtn'),toggleMute);
+bindBtn($('fsBtn'),toggleFS);
+bindBtn($('menuBtn'),toggleMenu);
+bindBtn($('mResume'),closeMenu);
+bindBtn($('mSave'),()=>{
+ saveGame(true);
+ $('mSave').textContent='セーブしました！';
+ setTimeout(()=>{$('mSave').textContent='セーブする'},900);
+});
+bindBtn($('mHelp'),()=>{closeMenu();say(HELP_TEXT)});
+bindBtn($('mSound'),toggleMute);
+bindBtn($('mTitle'),()=>{closeMenu();toTitle()});
+bindBtn($('tNew'),startNew);
+bindBtn($('tCont'),contGame);
+bindBtn($('oCont'),()=>{
+ $('overOv').classList.add('hidden');
+ if(loadGame()){S.hp=S.maxHp;state='play'}
+ else{S=S||newS();S.hp=S.maxHp;loadMap('overworld',50,61);state='play'}
+});
+bindBtn($('oTitle'),toTitle);
+
+// ---------- 起動 ----------
+buildAtlas();
+buildMaps();
+fit();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
